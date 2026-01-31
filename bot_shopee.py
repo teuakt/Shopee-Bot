@@ -4,35 +4,20 @@ import pyperclip
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-
-
-encoding='utf-8'
-
-#try:
-#    import distutils
-#except ImportError:
-#    import setuptools
 import undetected_chromedriver as uc
-
-
+from selenium.webdriver.common.keys import Keys
 
 # ==============================================================================
-# 1. FUNÇÕES AUXILIARES
+# CONFIGURAÇÕES (CONSTANTES)
 # ==============================================================================
-def carregar_texto_descricao():
-    try:
-        caminho_arquivo = os.path.join(os.getcwd(), "resources", "descricao.txt")
-        with open(caminho_arquivo, "r", encoding="utf-8") as arquivo:
-            return arquivo.read()
-    except FileNotFoundError:
-        print(f"❌ Erro: Arquivo não encontrado em {caminho_arquivo}")
-        return None
-        
-    except FileNotFoundError:
-        print(f"❌ Erro: Não encontrei o arquivo em: {caminho_arquivo}")
-        print("Certifique-se de que a pasta 'resources' e o arquivo 'descricao.txt' existem.")
-        return None
-    
+DELAY_PADRAO = 1.5
+CAMINHO_PROJETO = os.getcwd()
+CAMINHO_PERFIL = os.path.join(CAMINHO_PROJETO, "Perfil_Bot_Shopee")
+
+# ==============================================================================
+# FUNÇÕES AUXILIARES
+# ==============================================================================
+  
 def preencher_atributo_dinamico(driver, titulo_campo, valor_para_selecionar):
     wait = WebDriverWait(driver, 10)
     print(f"\n--- Preenchendo: {titulo_campo} -> {valor_para_selecionar} ---")
@@ -166,79 +151,44 @@ def preencher_atributo_dinamico(driver, titulo_campo, valor_para_selecionar):
     except Exception as e:
         print(f"⚠️ Erro fatal ao tentar preencher {titulo_campo}: {e}")
 
-def preencher_descricao(driver):
-    wait = WebDriverWait(driver, 10)
-    print("\n--- Preenchendo a Descrição do Produto (Via Paste) ---")
-    
-    # 1. Carrega o texto
-    texto_descricao = carregar_texto_descricao()
-    if not texto_descricao:
-        return
-
+def carregar_texto_descricao():
     try:
-        # 2. Copia para o Clipboard (Área de transferência)
-        pyperclip.copy(texto_descricao)
-        print(f"📋 Texto de {len(texto_descricao)} caracteres copiado para a memória.")
+        caminho_arquivo = os.path.join(os.getcwd(), "resources", "descricao.txt")
+        with open(caminho_arquivo, "r", encoding="utf-8") as arquivo:
+            return arquivo.read()
+    except FileNotFoundError:
+        print(f"Erro: Arquivo não encontrado em {caminho_arquivo}")
+        return None
+        
 
-        # 3. Encontra o campo
-        xpath_desc = "//div[contains(text(), 'Descrição do Produto')]/following::textarea[1] | //textarea[contains(@placeholder, 'Por favor insira caracteres para a descrição']"
-        campo_descricao = wait.until(EC.visibility_of_element_located((By.XPATH, xpath_desc)))
-        
-        # 4. Foca no campo
-        driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", campo_descricao)
-        time.sleep(1)
-        campo_descricao.click()
-        time.sleep(0.5)
-        
-        # 5. Limpa (Ctrl+A -> Delete) para garantir
-        campo_descricao.send_keys(Keys.CONTROL, 'a')
-        campo_descricao.send_keys(Keys.BACK_SPACE)
-        
-        # 6. COLA (Ctrl+V)
-        print(" Colando texto...")
-        campo_descricao.send_keys(Keys.CONTROL, 'v')
-        
-        # Pequena pausa para o site processar o texto colado
-        time.sleep(2)
-        print(" Descrição colada com sucesso!")
-
-    except Exception as e:
-        print(f"❌ Erro ao colar descrição: {e}")
 # ==============================================================================
-# 2. INÍCIO DO ROBÔ
+# FUNÇÕES DO BOT (MÓDULOS)
 # ==============================================================================
-
-caminho_projeto = os.getcwd()
-caminho_perfil = os.path.join(caminho_projeto, "Perfil_Bot_Shopee")
-
-options = uc.ChromeOptions()
-options.add_argument(f"--user-data-dir={caminho_perfil}")
-options.add_argument("--no-first-run --no-service-autorun --password-store=basic")
-
-# CAMINHO DA IMAGEM
-caminho_imagem = os.path.abspath("images/processadas/Bite the bullet/Anathema.jpg") 
-
-print("Iniciando Bot...")
-driver = uc.Chrome(options=options, version_main=144)
-wait = WebDriverWait(driver, 15)
-
-print("Aguardando carregamento da página...")
-time.sleep(5) 
-
-try:
-    # ==============================================================================
-    # PASSO 1: FOTO E NOME
-    # ==============================================================================
-    print("\n--- PASSO 1: FOTO E NOME ---")
+def iniciar_driver():
+    """Configura e retorna o driver do Chrome com o perfil carregado."""
+    print("🚗 Iniciando Driver...")
+    options = uc.ChromeOptions()
+    options.add_argument(f"--user-data-dir={CAMINHO_PERFIL}")
+    options.add_argument("--no-first-run --no-service-autorun --password-store=basic")
     
-    # 1.1 Foto
+    # Importante: Retornar o driver para quem chamou!
+    driver = uc.Chrome(options=options, version_main=144)
+    return driver
+
+def preencher_dados_basicos(driver, caminho_imagem, nome_produto):
+    """
+    PASSO 1: Faz upload da foto e preenche o nome do produto.
+    """
+    print("\n--- PASSO 1: DADOS BÁSICOS ---")
+    wait = WebDriverWait(driver, 10)
+    
     try:
         if os.path.exists(caminho_imagem):
             print("Procurando campo de upload...")
             campo_upload = wait.until(EC.presence_of_element_located((By.XPATH, "//input[@type='file']")))
             campo_upload.send_keys(caminho_imagem)
             print("Imagem enviada.")
-            time.sleep(2)
+            time.sleep(DELAY_PADRAO)
         else:
             print(f"ERRO: Imagem não existe no caminho: {caminho_imagem}")
     except Exception as e:
@@ -251,13 +201,13 @@ try:
         campo_nome = wait.until(EC.element_to_be_clickable((By.XPATH, xpath_nome)))
         campo_nome.click()
         campo_nome.clear()
-        campo_nome.send_keys("Miniatura RPG Taberna e Goblins - Resina 3D")
+        campo_nome.send_keys(f"Miniatura RPG Taberna e Goblins {nome_produto} - Resina 3D")
     except Exception as e:
         print(f"Erro no nome: {e}")
     
     # 1.3 Botão Próximo
     print("Avançando para próxima tela...")
-    time.sleep(2) 
+    time.sleep(DELAY_PADRAO) 
     xpath_botao = "//button[contains(., 'Next Step') or contains(., 'Próximo')]"
     
     try:
@@ -266,50 +216,46 @@ try:
     except:
         driver.execute_script("arguments[0].click();", driver.find_element(By.XPATH, xpath_botao))
 
-    print("✅ Tela 1 finalizada.")
+    print("Tela 1 finalizada.")
 
-    # ==============================================================================
-    # PASSO 2: CATEGORIA (LÓGICA BLINDADA DE LISTA)
-    # ==============================================================================
-    print("\n--- INICIANDO SELEÇÃO DE CATEGORIA ---")
-    time.sleep(3) # Espera carregar a tela nova
-
-    # Definições
+def selecionar_categoria(driver):
+    """
+    PASSO 2: Pesquisa a categoria e clica na hierarquia.
+    """
+    print("\n--- PASSO 2: CATEGORIA ---")
+    wait = WebDriverWait(driver, 10)
+    
     termo_alvo = "Figuras de Ação"
     hierarquia_para_clicar = ["Hobbies e Coleções", "Itens Colecionáveis", "Figuras de Ação"]
 
     try:
-        wait_curto = WebDriverWait(driver, 3) # Espera rápida para a sugestão   
+        wait_curto = WebDriverWait(driver, DELAY_PADRAO)  
 
-        # 1. ABRE A CAIXA DE CATEGORIA
+        # Abrir seletor
         print("Abrindo seletor...")
         botao_categoria = wait.until(EC.element_to_be_clickable(
             (By.XPATH, "//div[contains(@class, 'product-category-box') or contains(@class, 'shopee-product-category-input')]")
         ))
         driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", botao_categoria)
         botao_categoria.click()
-        time.sleep(1.5) 
+        time.sleep(DELAY_PADRAO) 
 
-        # --------------------------------------------------------------------------
-        # FASE 1: VERIFICAR SUGESTÃO AUTOMÁTICA
-        # --------------------------------------------------------------------------
+        # Verificar sugestão
         print(f"Verificando se '{termo_alvo}' já apareceu como sugestão...")
         sugestao_encontrada = False
         try:
             xpath_sugestao = f"//li[contains(., '{termo_alvo}')]"
             item_sugestao = wait_curto.until(EC.element_to_be_clickable((By.XPATH, xpath_sugestao)))
             item_sugestao.click()
-            print("⚡ SUGESTÃO DA SHOPEE ENCONTRADA E CLICADA!")
+            print("SUGESTÃO DA SHOPEE ENCONTRADA E CLICADA!")
             sugestao_encontrada = True
         except:
             print("Sugestão não encontrada. Iniciando busca manual...")
             sugestao_encontrada = False 
 
-        # --------------------------------------------------------------------------
-        # FASE 2: BUSCA MANUAL + CLIQUE EM CASCATA
-        # --------------------------------------------------------------------------
+        # Busca Manual se não achou sugestão
         if not sugestao_encontrada:
-            # A. Digita na busca
+
             print(f"Digitando '{termo_alvo}' no input...")
             input_busca = wait.until(EC.element_to_be_clickable(
                 (By.XPATH, "//input[contains(@placeholder, 'Insira ao menos')]")
@@ -318,7 +264,7 @@ try:
             input_busca.clear()
             input_busca.send_keys(termo_alvo)
 
-            time.sleep(3) # Pausa crucial para o filtro
+            time.sleep(DELAY_PADRAO*2) 
 
             # B. Loop na Hierarquia
             print("Navegando pelas colunas filtradas...")
@@ -330,11 +276,9 @@ try:
                 
                 opcao = wait.until(EC.element_to_be_clickable((By.XPATH, xpath_item)))
                 opcao.click()
-                time.sleep(1.5) # Pausa entre colunas
+                time.sleep(DELAY_PADRAO) # Pausa entre colunas
 
-        # --------------------------------------------------------------------------
-        # FASE 3: CONFIRMAR
-        # --------------------------------------------------------------------------
+        # Confirmando Categoria
         print("Finalizando Categoria...")
         try:
             btn_confirmar = WebDriverWait(driver, 2).until(EC.element_to_be_clickable(
@@ -342,38 +286,67 @@ try:
             ))
             btn_confirmar.click()
         except:
-            pass # As vezes fecha sozinho
+            pass 
             
-        print("✅ Categoria definida!")    
+        print("Categoria definida!")    
 
     except Exception as e:
-        print(f"❌ Erro na Categoria: {e}")
+        print(f"Erro na Categoria: {e}")
         input("Pressione ENTER para continuar manualmente...")
 
-   # ==============================================================================
-    # PASSO 3: ATRIBUTOS
-    # ==============================================================================
+def preencher_atributos(driver, marca, material, peso, estilo, quantidade):
+    """
+    PASSO 3: Preenche atributos técnicos (Marca, Peso, etc).
+    """
     print("\n--- PASSO 3: ATRIBUTOS ---")
+    wait = WebDriverWait(driver, 10)
+
+    campos = {"Material": material, "Marca": marca, "Peso do Produto": peso, 
+              "Estilo": estilo, "Quantidade": quantidade}
     
-    preencher_atributo_dinamico(driver, "Material", "Resin")
-    time.sleep(1.5)
-    preencher_atributo_dinamico(driver, "Marca", "Taberna e Goblins")
-    time.sleep(1.5)
-    preencher_atributo_dinamico(driver, "Peso do Produto", "30g")
-    time.sleep(1.5)
-    preencher_atributo_dinamico(driver, "Estilo", "Fantasy")
-    time.sleep(1.5)
-    preencher_atributo_dinamico(driver, "Quantidade", 1)
-    time.sleep(1.5)
-    preencher_descricao(driver)
+    for campo, valor in campos.items():
+        print(f"Preparando para preencher: {campo}")
+        preencher_atributo_dinamico(driver, campo, valor)
+        time.sleep(DELAY_PADRAO)
 
-except Exception as e:
-    print(f"\n❌ ERRO GERAL: {e}")
+def colar_descricao(driver):
+    pass
+
 
 # ==============================================================================
-# FREIO DE MÃO
+# ORQUESTRADOR (MAIN)
 # ==============================================================================
-print("\n" + "="*30)
-print("🚧 FIM DO SCRIPT 🚧")
-input("Pressione ENTER para fechar...")
-driver.quit()
+if __name__ == "__main__":
+    
+    NOME_DO_DIA = 'Anathema'
+    FOTO_DO_DIA = os.path.abspath(f"images/processadas/Bite the bullet/{NOME_DO_DIA}.jpg")
+    
+    # Iniciando
+    driver = iniciar_driver()
+    
+    try:
+        print("Acessando Shopee...")
+        time.sleep(5)
+    
+        preencher_dados_basicos(driver, FOTO_DO_DIA, NOME_DO_DIA)
+        
+        selecionar_categoria(driver)
+        
+        preencher_atributos(driver, 
+                            marca="Taberna e Goblins", 
+                            material="Resin", 
+                            peso="30g", 
+                            estilo="Fantasy", 
+                            quantidade=1)
+        
+        colar_descricao(driver)
+        
+        print("\n✅ PROCESSO FINALIZADO COM SUCESSO!")
+
+    except Exception as e:
+        print(f"\n❌ ERRO FATAL NO MAIN: {e}")
+        
+    finally:
+        print("\n🏁 Encerrando execução...")
+        input("Pressione ENTER para fechar o navegador...")
+        driver.quit()
