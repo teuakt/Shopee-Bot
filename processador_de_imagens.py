@@ -111,10 +111,9 @@ def processar_unica_imagem(caminho_entrada, caminho_saida, usar_logo=True):
         return False
 
 def processar_toda_pasta():
-    print(f"Iniciando processamento em massa de: {PASTA_ENTRADA}")
+    print(f"🚀 Iniciando processamento em massa de: {PASTA_ENTRADA}")
     for root, dirs, files in os.walk(PASTA_ENTRADA):
-        
-        # Cria a estrutura de pastas na saída
+
         caminho_relativo = os.path.relpath(root, PASTA_ENTRADA)
         pasta_destino_atual = os.path.join(PASTA_SAIDA, caminho_relativo)
         
@@ -122,28 +121,25 @@ def processar_toda_pasta():
             os.makedirs(pasta_destino_atual)
 
         for arquivo in files:
+            # Filtro para extensões
             if arquivo.lower().endswith(('.png', '.jpg', '.jpeg', '.webp')):
                 caminho_completo = os.path.join(root, arquivo)
-                
-                # Gera nome limpo
+
                 nome_limpo = limpar_e_formatar_nome(arquivo) + ".jpg"
                 caminho_final = os.path.join(pasta_destino_atual, nome_limpo)
-                
-                # Verifica se já existe, caso sim, pula para o próximo
-                contador = 1
-                temp_path = caminho_final
-                while os.path.exists(temp_path):
-                    print(f"Pulando {arquivo} pois já existe."); break 
-                
-                # Se decidiu processar:
-                if contador == 1 or not os.path.exists(temp_path):
-                     processar_unica_imagem(caminho_completo, temp_path)
+            
+                # Verifica duplicata
+                if os.path.exists(caminho_final):
+                    print(f"Pulando {arquivo} (Já processado).")
+                    continue 
+            
+                processar_unica_imagem(caminho_completo, caminho_final)
 
 
 # Testes
 if __name__ == "__main__":
     # Processar tudo
-    #processar_toda_pasta()
+    processar_toda_pasta()
 
     # Teste unitário em uma imagem específica
     print("🧪 Modo de Teste Unitário Ativado")
@@ -158,8 +154,8 @@ if __name__ == "__main__":
             arquivo_teste = os.path.join(pasta_entrada_teste, f)
             saida_teste = os.path.join(pasta_saida_teste, limpar_e_formatar_nome(f) + ".jpg")
             processar_unica_imagem(arquivo_teste, saida_teste)
-            print(f"Tamanho anterior: {os.path.getsize(arquivo_teste)//1024}Kb")
-            print(f"Tamanho atual: {os.path.getsize(saida_teste)//1024}Kb")
+            print(f"Tamanho anterior: {os.path.getsize(arquivo_teste)/1024:.2f}Kb")
+            print(f"Tamanho atual: {os.path.getsize(saida_teste)/1024:.2f}Kb")
     else:
         print(f"Pasta de teste não encontrada: {pasta_entrada_teste}")
         print("Edite a variável 'pasta_entrada_teste' no final do script.")
