@@ -3,6 +3,7 @@ __pycache__/
 Perfil_Bot_Shopee/
 images/originais/*
 images/processadas/*
+images/teste_saida/
 resources/*
 images/logo.png
 bot_treino.py
