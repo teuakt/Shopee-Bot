@@ -310,6 +310,53 @@ def preencher_atributos(driver, marca, material, peso, estilo, quantidade):
         time.sleep(DELAY_PADRAO)
 
 def colar_descricao(driver):
+    """
+    Lê o arquivo de texto e cola no campo de descrição (Editor Rich Text)..
+    """
+    print("DESCRIÇÃO")
+    wait = WebDriverWait(driver, 10)
+    
+    # Carrega o texto
+    texto_descricao = carregar_texto_descricao()
+    if not texto_descricao:
+        return
+
+    try:
+        # Copia para o Clipboard
+        pyperclip.copy(texto_descricao)
+        print(f"Texto copiado ({len(texto_descricao)} caracteres).")
+
+        # Este XPath procura qualquer DIV que esteja marcada como editável (contenteditable)
+        xpath_editor = "//div[@contenteditable='true']"
+        
+        campo_descricao = wait.until(EC.element_to_be_clickable((By.XPATH, xpath_editor)))
+        
+        # Foca no campo
+        driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", campo_descricao)
+        time.sleep(1)
+        campo_descricao.click()
+        time.sleep(0.5)
+        
+        # Limpa o campo com atalhos do teclado (Ctrl+A e Backspace)
+        campo_descricao.send_keys(Keys.CONTROL + "a")
+        time.sleep(0.5)
+        campo_descricao.send_keys(Keys.BACK_SPACE)
+        time.sleep(0.5)
+        
+        # 6. COLA (Ctrl+V)
+        print("Colando texto...")
+        campo_descricao.send_keys(Keys.CONTROL + "v")
+        
+        time.sleep(DELAY_PADRAO)
+        
+        # Validação simples visual
+        if len(campo_descricao.text) > 0:
+             print("✅ Descrição colada com sucesso!")
+        else:
+             print("⚠️ O campo parece vazio. Verifique se o texto foi copiado.")
+
+    except Exception as e:
+        print(f"❌ Erro ao colar descrição: {e}")
     pass
 
 
