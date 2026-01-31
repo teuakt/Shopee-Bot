@@ -1,0 +1,10 @@
+__pycache__/
+*.log
+Perfil_Bot_Shopee/
+images/originais/*
+images/processadas/*
+resources/*
+images/logo.png
+bot_treino.py
+
+!.gitkeep
