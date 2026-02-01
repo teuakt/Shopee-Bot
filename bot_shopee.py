@@ -354,37 +354,50 @@ def colar_descricao(driver):
 
 def preencher_informacoes_finais(driver):
     """
-    Campos: Preço, Estoque, Frete (Peso/Dimensões), Pré-encomenda e Salvar.
+    Sessoes: Informações de Vendas, Envio e finalização do produto.
     """
     print("\n--- INFORMAÇÕES FINAIS ---")
     wait = WebDriverWait(driver, 10)
 
     try:
-        # PREÇO E ESTOQUE
-        print(" -> Preenchendo Vendas (Preço e Estoque)...")
+        # Sessão Informações de vendas:
         
-        # Preço
-        xpath_preco = "//div[contains(@data-product-edit-field-unique-id, 'price')]//input[contains(@placeholder, 'Inserir')]" 
-        input_preco = espera_input(driver, xpath_preco)
-        input_preco.send_keys("999")
-
-        # Estoque
-        xpath_estoque = "//div[contains(@class, 'basic-stock')]//input[contains(@placeholder, 'Inserir')]"
-        input_estoque = espera_input(driver, xpath_estoque)
-        input_estoque.send_keys("100")
-
-        # Variações
-        print(" -> Verificando variações...")
+        print(" -> Verificando informações de venda...")
         
         # Clicando no botão de adicionar variações
         xpath_variacoes = "//div[contains(@class, 'variation-add-button')]//button"
         espera_click(driver, xpath_variacoes)
 
         # Encontrando o input de variação
-        xpath_input_variacao = "//div[contains(@class, 'variation-edit-main)]//input"
+        xpath_input_variacao = "//div[contains(@class, 'variation-edit-main')]//input"
         espera_input(driver, xpath_input_variacao).send_keys("Primed?")
 
-        # ENVIO, PESO E DIMENSÕES
+        # Input de opções
+        xpath_input_opcao1 = "(//div[contains(@class,'option-container')]//input[@placeholder='Inserir'])[1]"
+        espera_input(driver, xpath_input_opcao1).send_keys("Sim")
+        xpath_input_opcao2 = "(//div[contains(@class,'option-container')]//input[@placeholder='Inserir'])[2]"
+        espera_input(driver, xpath_input_opcao2).send_keys("Não")
+
+        # Preços de opcoes
+        print(" Definindo preços das variações...")
+        xpath_preco_opcao1 = "(//div[contains(@class,'variation-model-table-body')]//div[contains(@class, 'table-cell-wrapper')][1]//input[contains(@placeholder, 'Inserir')])[1]"
+        espera_input(driver, xpath_preco_opcao1).send_keys("99,90")
+        xpath_preco_opcao2 = "(//div[contains(@class,'variation-model-table-body')]//div[contains(@class, 'table-cell-wrapper')][2]//input[contains(@placeholder, 'Inserir')])[1]"
+        espera_input(driver, xpath_preco_opcao2).send_keys("109,90")
+
+        # Estoque de opcoes
+        print(" Definindo estoques das variações...")
+        xpath_estoque_opcao1 = "(//div[contains(@class,'variation-model-table-body')]//div[contains(@class, 'table-cell-wrapper')][1]//input[contains(@placeholder, 'Inserir')])[2]"
+        espera_input(driver, xpath_estoque_opcao1).send_keys("500")
+        xpath_estoque_opcao2 = "(//div[contains(@class,'variation-model-table-body')]//div[contains(@class, 'table-cell-wrapper')][2]//input[contains(@placeholder, 'Inserir')])[2]"
+        espera_input(driver, xpath_estoque_opcao2).send_keys("500")
+
+
+    except Exception as e:
+        print(f"❌ Erro na sessão de variações: {e}")
+    
+    try:
+        # Sessão Envio
         print(" Preenchendo Frete, peso e dimensões")
         
         # Peso
@@ -392,7 +405,7 @@ def preencher_informacoes_finais(driver):
         input_peso = espera_input(driver, xpath_peso)
         input_peso.send_keys("0,1")
 
-        # Dimensões (Largura, Comprimento, Altura)
+        # Dimensões
         dimensoes = ["dimension.width", "dimension.length", "dimension.height"]
         dimensoesPlaceholder = ["Largura", "Comprimento", "Altura"]
         for dim in dimensoes:
@@ -402,7 +415,10 @@ def preencher_informacoes_finais(driver):
             input_dim.send_keys("10")
             time.sleep(0.3)
 
-        time.sleep(DELAY_PADRAO)
+        time.sleep(1.5)
+        # Click swith de retirada
+        switch_retirada = "//div[contains(@class,'logistics-item-ui-t1')][.//div[contains(normalize-space(.), 'Retirada')]]//div[contains(@class,'eds-switch')]"
+        espera_click(driver, switch_retirada)      
 
         # SOB ENCOMENDA 
         print("Configurando Pré-Encomenda")
@@ -427,7 +443,10 @@ def preencher_informacoes_finais(driver):
         input_dias.send_keys("7")
 
         time.sleep(DELAY_PADRAO)
+    except Exception as e:
+        print(f"❌ Erro na sessão de envio: {e}")
 
+    try:
         # SALVAR E NÃO PUBLICAR
         print(" -> Salvando...")
         
