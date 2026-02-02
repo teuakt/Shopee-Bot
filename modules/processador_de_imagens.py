@@ -134,9 +134,9 @@ if __name__ == "__main__":
     print("🧪 Modo de Teste Unitário Ativado")
     
     # Path da pasta de teste
-    pasta_entrada_teste = "images/teste_entrada/" 
-    pasta_saida_teste = "images/teste_saida/"
-    processar_unica_imagem(os.path.join(pasta_entrada_teste, "UnchainedImmortals_SmallAxe.jpg"), os.path.join(pasta_saida_teste, "teste_saida.jpg"))
+    pasta_entrada_teste = "./images/processadas/Bite the bullet/" 
+    pasta_saida_teste = "./images/teste_saida/"
+    processar_unica_imagem(os.path.join(pasta_entrada_teste, "Anathema.jpg"), os.path.join(pasta_saida_teste, "teste_saida.jpg"))
     
 
     if os.path.exists(pasta_entrada_teste):

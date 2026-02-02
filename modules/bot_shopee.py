@@ -225,15 +225,29 @@ def limpar_input(el):
 # ==============================================================================
 # LÓGICA DE PREENCHIMENTO DO BOT
 # ==============================================================================
-def iniciar_driver():
+def iniciar_driver(headless=False):
     """Configura e retorna o driver do Chrome com o perfil carregado."""
     print("Iniciando Driver...")
     options = uc.ChromeOptions()
     options.add_argument(f"--user-data-dir={CAMINHO_PERFIL}")
     options.add_argument("--no-first-run --no-service-autorun --password-store=basic")
     
+    # --- NOVO BLOCO ---
+    if headless:
+        print("Modo Invisível (Headless) Ativado!")
+        # --headless=new é a versão moderna e mais estável do Chrome
+        options.add_argument("--headless=new") 
+        # Importante definir tamanho de tela para o bot achar os elementos
+        options.add_argument("--window-size=1920,1080") 
+    # ------------------
+
     # Importante: Retornar o driver para quem chamou!
     driver = uc.Chrome(options=options, version_main=144)
+    
+    # Se estiver invisível, não maximizamos a janela (pois ela não existe visualmente)
+    if not headless:
+        driver.maximize_window()
+        
     return driver
 
 def preencher_dados_basicos(driver, caminho_imagem, nome_produto, nome_colecao):

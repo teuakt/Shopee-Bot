@@ -82,8 +82,7 @@ def fluxo_cadastro():
 
     # VARREDURA
     for raiz, pastas, arquivos in os.walk(DIR_PROC):
-        # Se estivermos na raiz exata (images/processadas), pulamos, 
-        # pois queremos apenas as subpastas (Coleções)
+        # Buscando subpastas apenas
         if raiz == DIR_PROC:
             continue
             
@@ -103,12 +102,25 @@ def fluxo_cadastro():
 
     print(f"Encontrados {len(lista_tarefas)} produtos em diversas coleções.")
     
+    pergunta_headless = input("Gostaria de rodar em 2º plano (invisível)? [S/N]: ").strip().lower()
+    modo_invisivel = pergunta_headless == 's'
+
+    if modo_invisivel:
+        print("⚠️  AVISO: No modo invisível você NÃO conseguirá fazer login manual.")
+        print("Use apenas se já estiver logado no perfil anteriormente.")
+        time.sleep(2)
+   
     # Inicia driver
-    driver = iniciar_driver()
+    driver = iniciar_driver(headless=modo_invisivel)
     
     try:
         driver.get("https://seller.shopee.com.br/portal/product/new")
-        print("\nGARANTA QUE JA ESTEJA LOGADO NA CONTA DA SHOPEE SELLER! COMEÇANDO...")
+        
+        if not modo_invisivel:
+            input("\n🔐 FAÇA O LOGIN MANUALMENTE e pressione ENTER aqui para começar...")
+        else:
+            print("\n⏳ Aguardando 5 segundos para carregar sessão salva...")
+            time.sleep(5)
 
         # Loop com Barra de Progresso
         with tqdm(total=len(lista_tarefas), desc="Cadastrando", unit="prod", colour="green") as barra:
