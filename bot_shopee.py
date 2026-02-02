@@ -205,7 +205,7 @@ def limpar_input(el):
 # ==============================================================================
 def iniciar_driver():
     """Configura e retorna o driver do Chrome com o perfil carregado."""
-    print("🚗 Iniciando Driver...")
+    print("Iniciando Driver...")
     options = uc.ChromeOptions()
     options.add_argument(f"--user-data-dir={CAMINHO_PERFIL}")
     options.add_argument("--no-first-run --no-service-autorun --password-store=basic")
@@ -462,6 +462,35 @@ def preencher_informacoes_finais(driver):
 
     except Exception as e:
         print(f"❌ Erro na etapa final: {e}")
+
+# No arquivo bot_shopee.py
+
+def cadastrar_produto_completo(driver, caminho_imagem, nome_produto):
+    """
+    Função Wrapper que chama todos os passos do cadastro.
+    """
+    print(f"\nINICIANDO CADASTRO: {nome_produto}")
+    
+    # 0. Garante que está na tela de Adicionar Produto
+    url_add = "https://seller.shopee.com.br/portal/product/new"
+    if url_add not in driver.current_url:
+        driver.get(url_add)
+        time.sleep(3) # Espera carregar
+
+    # 1. Dados Básicos
+    preencher_dados_basicos(driver, caminho_imagem, nome_produto)
+    
+    # 2. Categoria
+    selecionar_categoria(driver)
+    
+    # 3. Descrição
+    colar_descricao(driver)
+    
+    # Informações Finais
+    preencher_informacoes_finais(driver)
+    
+    print(f"✨ PRODUTO {nome_produto} FINALIZADO!")
+    time.sleep(2) 
 
 # ==============================================================================
 # ORQUESTRADOR (MAIN)
