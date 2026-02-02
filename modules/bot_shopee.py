@@ -226,27 +226,50 @@ def limpar_input(el):
 # LÓGICA DE PREENCHIMENTO DO BOT
 # ==============================================================================
 def iniciar_driver(headless=False):
-    """Configura e retorna o driver do Chrome com o perfil carregado."""
-    print("Iniciando Driver...")
+    """Configura o driver com otimizações de performance SEGURAS."""
+    print("Iniciando Driver (Modo Performance)...")
     options = uc.ChromeOptions()
     options.add_argument(f"--user-data-dir={CAMINHO_PERFIL}")
     options.add_argument("--no-first-run --no-service-autorun --password-store=basic")
-    
-    # --- NOVO BLOCO ---
-    if headless:
-        print("Modo Invisível (Headless) Ativado!")
-        # --headless=new é a versão moderna e mais estável do Chrome
-        options.add_argument("--headless=new") 
-        # Importante definir tamanho de tela para o bot achar os elementos
-        options.add_argument("--window-size=1920,1080") 
-    # ------------------
 
-    # Importante: Retornar o driver para quem chamou!
+    # --- OTIMIZAÇÃO POR PREFS ---
+    prefs = {
+        
+        # SEGURANÇA: Manter IMAGENS ativadas (Crucial para o upload funcionar)
+        "profile.managed_default_content_settings.images": 1,
+        "profile.default_content_setting_values.images": 1,
+        
+        # OTIMIZAÇÃO: Bloquear coisas inúteis que gastam RAM
+        "profile.default_content_setting_values.notifications": 2,
+        "profile.default_content_setting_values.geolocation": 2,
+        "profile.default_content_setting_values.media_stream_mic": 2,
+        "profile.default_content_setting_values.media_stream_camera": 2,
+        
+        # Tenta forçar o navegador a não renderizar animações de acessibilidade
+        "accessibility.animation_policy": 2 
+    }
+    options.add_experimental_option("prefs", prefs)
+    # ---------------------------------------------------------------
+
+    # --- Otimização do Processo ---
+    options.add_argument("--disable-smooth-scrolling")
+    options.add_argument("--mute-audio")
+    options.add_argument("--disable-extensions")
+    options.add_argument("--no-default-browser-check")
+    
+    # Para evitar crash no upload
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--disable-dev-shm-usage")
+
+    if headless:
+        print("👻 Modo Invisível (Headless) Ativado!")
+        options.add_argument("--headless=new") 
+        options.add_argument("--window-size=1080,720") 
+    else:
+        options.add_argument("--start-maximized")
     driver = uc.Chrome(options=options, version_main=144)
     
-    # Se estiver invisível, não maximizamos a janela (pois ela não existe visualmente)
-    if not headless:
-        driver.maximize_window()
         
     return driver
 
@@ -264,7 +287,7 @@ def preencher_dados_basicos(driver, caminho_imagem, nome_produto, nome_colecao):
         campo_upload.send_keys(caminho_imagem)
         
         print("Arquivo enviado. Aguardando preview...")
-        esperar_upload_ou_matar(driver) # Função que espera o upload ou lança erro, por timeout
+        esperar_upload_ou_matar(driver) # Função que espera o upload ou lança erro
     else:
         raise Exception(f"Imagem não encontrada no PC: {caminho_imagem}")
 
@@ -596,7 +619,7 @@ def cadastrar_produto_completo(driver, caminho_imagem, nome_produto, nome_coleca
 if __name__ == "__main__":
     
     NOME_DO_DIA = 'Beholder'
-    FOTO_DO_DIA = os.path.abspath(f"images/teste_saida/Bite the bullet/{NOME_DO_DIA}.jpg")
+    FOTO_DO_DIA = os.path.abspath(f"images/processadas/Bite the bullet/{NOME_DO_DIA}.jpg")
     NOME_COLECAO = os.path.basename(os.path.dirname(FOTO_DO_DIA))
     # Iniciando
     driver = iniciar_driver()
