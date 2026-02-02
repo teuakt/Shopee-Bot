@@ -504,34 +504,54 @@ def preencher_informacoes_finais(driver):
 
 # No arquivo bot_shopee.py
 
-def cadastrar_produto_completo(driver, caminho_imagem, nome_produto, nome_colecao):
+def cadastrar_produto_completo(driver, caminho_imagem, nome_produto, nome_colecao, max_tentativas=3):
     """
     Função Wrapper que chama todos os passos do cadastro.
     """
     print(f"\n🚀 INICIANDO CADASTRO: {nome_produto} (Coleção: {nome_colecao})")
     
-    # NAVEGAÇÃO FORÇADA (Reset de Estado)
+    for tentativa in range(1, max_tentativas + 1):
+        try:
+            print(f"🔄 Tentativa {tentativa} de {max_tentativas}...")
 
-    url_add = "https://seller.shopee.com.br/portal/product/new"
-    driver.get(url_add)
+            url_add = "https://seller.shopee.com.br/portal/product/new"
+            driver.get(url_add)
+            time.sleep(3) 
 
-    preencher_dados_basicos(driver, caminho_imagem, nome_produto, nome_colecao)
+            # ==================================================================
+            # EXECUÇÃO DOS PASSOS
+            # ==================================================================
 
-    selecionar_categoria(driver)
-    
-    preencher_atributos(driver, 
-                        marca="Taberna e Goblins", 
-                        material="Resin", 
-                        peso="30g", 
-                        estilo="Fantasy", 
-                        quantidade=1)
-    
-    colar_descricao(driver)
+            preencher_dados_basicos(driver, caminho_imagem, nome_produto, nome_colecao)
+            
+            selecionar_categoria(driver)
+            
+            colar_descricao(driver)
 
-    preencher_informacoes_finais(driver)
-    
-    print(f"✨ PRODUTO {nome_produto} FINALIZADO!")
-    time.sleep(2) 
+            preencher_atributos(driver, 
+                                marca="Taberna e Goblins",  
+                                material="Resin",
+                                peso="30g",
+                                estilo="Fantasy",
+                                quantidade=1)
+            
+            preencher_informacoes_finais(driver)
+            
+            # ==================================================================
+            
+            print(f"✨ PRODUTO {nome_produto} FINALIZADO COM SUCESSO!")
+            time.sleep(2) 
+            return
+
+        except Exception as e:
+            print(f"⚠️  Falha na tentativa {tentativa}: {e}")
+            
+            if tentativa < max_tentativas:
+                print("♻️  Recarregando página para tentar novamente...")
+                time.sleep(2)
+            else:
+                print(f"❌  Esgotadas as {max_tentativas} tentativas para {nome_produto}.")
+                raise e
 
 # ==============================================================================
 # ORQUESTRADOR (MAIN)
