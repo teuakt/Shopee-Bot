@@ -18,10 +18,10 @@ CAMINHO_PERFIL = os.path.join(CAMINHO_PROJETO, "Perfil_Bot_Shopee")
 # FUNÇÕES AUXILIARES
 # ==============================================================================
 
-def esperar_upload_ou_matar(driver, timeout=5):
+def esperar_upload_ou_matar(driver, timeout=5): 
     """
     Espera o preview da imagem aparecer.
-    Se não aparecer, mata o script.
+    Se não aparecer, lança um erro para o Main tratar (pular produto).
     """
     try:
         WebDriverWait(driver, timeout).until(
@@ -31,10 +31,10 @@ def esperar_upload_ou_matar(driver, timeout=5):
         )
         print("✅ Upload confirmado.")
         return True
-    except:
-        print("❌ Upload travado. Reiniciando script.")
-        driver.quit()
-        os._exit(1)
+        
+    except Exception:
+        print("❌ Upload demorou demais (Timeout).")
+        raise Exception("Falha no Upload da Imagem (Timeout)")
 
 def preencher_atributo_dinamico(driver, titulo_campo, valor_para_selecionar):
     wait = WebDriverWait(driver, 10)
