@@ -5,9 +5,9 @@ import re
 
 # CONFIGURAÇÕES GERAIS
 
-PASTA_ENTRADA = "images/originais"
-PASTA_SAIDA = "images/processadas"
-CAMINHO_LOGO = "images/logo.png"
+PASTA_ENTRADA = "./images/originais"
+PASTA_SAIDA = "./images/processadas"
+CAMINHO_LOGO = "./images/logo.png"
 TAMANHO_MAXIMO = 1024 
 
 # FUNÇÕES UTILITÁRIAS

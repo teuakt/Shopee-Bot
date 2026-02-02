@@ -1,7 +1,19 @@
+# Pastas geradas pelo PyInstaller
+build/
+dist/
+*.spec
+
+# Cache do Python (arquivos .pyc)
 __pycache__/
-*.log
+*.pyc
+
+# Pastas de ambiente virtual
+venv/
+env/
+.env
+
+# Binários e Drivers (não é boa prática versionar arquivos de 100MB+)
+*.exe
+chromedriver.exe
 Perfil_Bot_Shopee/
 resources/*
-bot_treino.py
-teste.py
-!.gitkeep

@@ -4,10 +4,10 @@ import time
 from tqdm import tqdm  
 
 # --- IMPORTS DOS SEUS MÓDULOS ---
-from bot_shopee import iniciar_driver, cadastrar_produto_completo
+from modules.bot_shopee import iniciar_driver, cadastrar_produto_completo
 
 try:
-    from processador_de_imagens import processar_unica_imagem 
+    from modules.processador_de_imagens import processar_unica_imagem 
 except ImportError:
     def processar_imagem(entrada, saida):
         time.sleep(1)
