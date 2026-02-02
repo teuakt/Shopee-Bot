@@ -220,36 +220,36 @@ def preencher_dados_basicos(driver, caminho_imagem, nome_produto, nome_colecao):
     print("\n--- PASSO 1: DADOS BÁSICOS ---")
     wait = WebDriverWait(driver, 10)
     
-    try:
-        if os.path.exists(caminho_imagem):
-            print("Procurando campo de upload...")
-            campo_upload = wait.until(EC.presence_of_element_located((By.XPATH, "//input[@type='file']")))
-            campo_upload.send_keys(caminho_imagem)
-            esperar_upload_ou_matar(driver, timeout=5)
-            print("Imagem enviada.")
-        else:
-            print(f"ERRO: Imagem não existe no caminho: {caminho_imagem}")
-    except Exception as e:
-        print(f"Erro no upload da imagem: {e}")
+    if os.path.exists(caminho_imagem):
+        print("Procurando campo de upload...")
+        
+        campo_upload = wait.until(EC.presence_of_element_located((By.XPATH, "//input[@type='file']")))
+        campo_upload.send_keys(caminho_imagem)
+        
+        print("Arquivo enviado. Aguardando preview...")
+        esperar_upload_ou_matar(driver) # Função que espera o upload ou lança erro, por timeout
+    else:
+        raise Exception(f"Imagem não encontrada no PC: {caminho_imagem}")
 
     # Nome
     nome_final = f"Impressão 3D - Miniatura RPG Taberna e Goblins - {nome_colecao} - {nome_produto} - Resina 3D"
     xpath_nome = "//input[@placeholder='Nome da Marca + Tipo do Produto + Atributos-chave (Materiais, Cores, Tamanho, Modelo)']"
 
-    # Tentamos até 3 vezes preencher o nome
     for tentativa in range(3):
         try:
-            print(f"Preenchendo nome (Tentativa {tentativa+1})...")
+            print(f"Preenchendo nome...")
+            if tentativa > 0:
+                print(f" -> Tentativa {tentativa + 1} de 3...")
             
-            # 1. Busca o elemento (Se deu stale antes, aqui ele pega a nova referência)
+            # Busca o elemento
             campo_nome = wait.until(EC.element_to_be_clickable((By.XPATH, xpath_nome)))
             
-            # 2. Clica e Limpa
+            # Clica e Limpa
             campo_nome.click()
             campo_nome.send_keys(Keys.CONTROL + "a")
             campo_nome.send_keys(Keys.BACK_SPACE)
             
-            # 3. Digita
+            # Digita
             campo_nome.send_keys(nome_final)
             
             # Se chegou aqui sem erro, sai do loop
@@ -281,9 +281,9 @@ def preencher_dados_basicos(driver, caminho_imagem, nome_produto, nome_colecao):
 
 def selecionar_categoria(driver):
     """
-    PASSO 2: Pesquisa a categoria e clica na hierarquia.
+    Pesquisa a categoria e clica na hierarquia.
     """
-    print("\n--- PASSO 2: CATEGORIA ---")
+    print("\n--- CATEGORIA ---")
     wait = WebDriverWait(driver, 10)
     
     termo_alvo = "Figuras de Ação"
@@ -292,7 +292,7 @@ def selecionar_categoria(driver):
     try:
         # Abrir seletor
         print("Abrindo seletor...")
-        espera_click(driver, xpath_categoria, timeout=3)
+        espera_click(driver, xpath_categoria, timeout=1)
 
         # Verificar sugestão
         print(f"Verificando se '{termo_alvo}' já apareceu como sugestão...")

@@ -113,17 +113,17 @@ def processar_unica_imagem(caminho_entrada, pasta_destino, usar_logo=True):
             else:
                 img.paste(logo, (pos1_x, pos1_y), logo)
 
-        # Conversão para RGB final (remove canal alpha pois JPG não suporta)
-        if not os.path.exists(os.path.dirname(pasta_destino)):
-            os.makedirs(os.path.dirname(pasta_destino))
+        # Conversão para RGB
+        if not os.path.exists(pasta_destino):
+            os.makedirs(pasta_destino)
 
-        img.convert("RGB").save(pasta_destino, "JPEG", quality=85, optimize=True)
+        img.convert("RGB").save(caminho_saida_final, "JPEG", quality=85, optimize=True)
         print(f"Sucesso: {os.path.basename(pasta_destino)}")
-        return True
+        return caminho_saida_final
 
     except Exception as e:
         print(f"Erro em {os.path.basename(caminho_entrada)}: {e}")
-        return False
+        return None 
 
 
 # Testes

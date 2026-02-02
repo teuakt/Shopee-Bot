@@ -117,11 +117,10 @@ def fluxo_cadastro():
                 tqdm.write(f"\n➡️  Iniciando: {nome_produto} | Coleção: {nome_colecao}")
 
                 try:
-                    # --- CHAMA O BOT (Passando a coleção!) ---
+                    # CHAMA O BOT
                     cadastrar_produto_completo(driver, caminho_img, nome_produto, nome_colecao)
                     
-                    # --- MOVER PARA ENVIADAS (Mantendo a estrutura) ---
-                    # Cria a pasta da coleção dentro de 'enviadas' se não existir
+                    # --- MOVER PARA ENVIADAS ---
                     pasta_destino_colecao = os.path.join(DIR_DONE, nome_colecao)
                     os.makedirs(pasta_destino_colecao, exist_ok=True)
                     
@@ -154,7 +153,6 @@ def menu_principal():
         if opcao == "1":
             tem_arquivos = fluxo_processamento()
             if tem_arquivos:
-                # Pergunta lógica sequencial
                 resp = input("\nDesceja CADASTRAR os produtos processados agora? (s/n): ").lower()
                 if resp == 's':
                     fluxo_cadastro()
