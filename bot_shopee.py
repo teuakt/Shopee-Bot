@@ -1,11 +1,11 @@
 import os
 import time
-import pyperclip
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import undetected_chromedriver as uc
 from selenium.webdriver.common.keys import Keys
+from selenium.common.exceptions import StaleElementReferenceException
 
 # ==============================================================================
 # CONFIGURAÇÕES (CONSTANTES)
@@ -35,7 +35,6 @@ def esperar_upload_ou_matar(driver, timeout=5):
         print("❌ Upload travado. Reiniciando script.")
         driver.quit()
         os._exit(1)
-
 
 def preencher_atributo_dinamico(driver, titulo_campo, valor_para_selecionar):
     wait = WebDriverWait(driver, 10)
@@ -234,22 +233,49 @@ def preencher_dados_basicos(driver, caminho_imagem, nome_produto, nome_colecao):
         print(f"Erro no upload da imagem: {e}")
 
     # Nome
-    try:
-        print("Preenchendo nome...")
-        xpath_nome = "//input[@placeholder='Nome da Marca + Tipo do Produto + Atributos-chave (Materiais, Cores, Tamanho, Modelo)']"
-        campo_nome = espera_click(driver, xpath_nome)
-        campo_nome.send_keys(f"Miniatura RPG - Coleção {nome_colecao} - {nome_produto} - Taverna e Goblins - Impressão 3D Resina")
-    except Exception as e:
-        print(f"Erro no nome: {e}")
-    
-    # Botão Próximo
+    nome_final = f"Impressão 3D - Miniatura RPG Taberna e Goblins - {nome_colecao} - {nome_produto} - Resina 3D"
+    xpath_nome = "//input[@placeholder='Nome da Marca + Tipo do Produto + Atributos-chave (Materiais, Cores, Tamanho, Modelo)']"
+
+    # Tentamos até 3 vezes preencher o nome
+    for tentativa in range(3):
+        try:
+            print(f"Preenchendo nome (Tentativa {tentativa+1})...")
+            
+            # 1. Busca o elemento (Se deu stale antes, aqui ele pega a nova referência)
+            campo_nome = wait.until(EC.element_to_be_clickable((By.XPATH, xpath_nome)))
+            
+            # 2. Clica e Limpa
+            campo_nome.click()
+            campo_nome.send_keys(Keys.CONTROL + "a")
+            campo_nome.send_keys(Keys.BACK_SPACE)
+            
+            # 3. Digita
+            campo_nome.send_keys(nome_final)
+            
+            # Se chegou aqui sem erro, sai do loop
+            print(f" -> Título preenchido com sucesso.")
+            break 
+            
+        except StaleElementReferenceException:
+            print("⚠️ Página atualizou. Tentando campo 'Nome' novamente...")
+            time.sleep(2) 
+        except Exception as e:
+            print(f"❌ Erro genérico no nome: {e}")
+            raise e 
+    # 1.3 Botão Próximo
     print("Avançando para próxima tela...")
+    time.sleep(DELAY_PADRAO) 
     xpath_botao = "//button[contains(., 'Next Step') or contains(., 'Próximo')]"
     
     try:
-        espera_click(driver, xpath_botao)
+        # Tenta clicar no botão. Se falhar, tenta via JS
+        botao_avancar = wait.until(EC.element_to_be_clickable((By.XPATH, xpath_botao)))
+        botao_avancar.click()
     except:
-        driver.execute_script("arguments[0].click();", driver.find_element(By.XPATH, xpath_botao))
+        try:
+             driver.execute_script("arguments[0].click();", driver.find_element(By.XPATH, xpath_botao))
+        except Exception as e:
+             raise Exception(f"Botão Próximo não encontrado ou não clicável: {e}")
 
     print("Tela 1 finalizada.")
 
@@ -416,13 +442,22 @@ def preencher_informacoes_finais(driver):
             time.sleep(0.3)
 
         time.sleep(1.5)
+
         # Click swith de retirada
         try:
-            switch_retirada = "//div[contains(@class,'logistics-item-ui-t1')][.//div[contains(normalize-space(.), 'Retirada')]]//div[contains(@class,'eds-switch--open')]"
-            espera_click(driver, switch_retirada)   
+            xpath_switch_base = "//div[contains(@class,'logistics-item-ui-t1')][.//div[contains(normalize-space(.), 'Retirada')]]//div[contains(@class,'eds-switch')]"
+            
+            switch_el = wait.until(EC.visibility_of_element_located((By.XPATH, xpath_switch_base)))
+            
+            classes_do_elemento = switch_el.get_attribute("class")
+            
+            if "eds-switch--open" in classes_do_elemento:
+                print(" -> Switch Retirada estava ATIVADO. Desativando...")
+                switch_el.click()
+                time.sleep(0.5) 
+                
         except Exception as e:
-            print(f"Retirada já desativada ou erro ao clicar: {e}")
-            pass   
+            print(f"Não foi possível verificar o switch de Retirada: {e}")
 
         # SOB ENCOMENDA 
         print("Configurando Pré-Encomenda")
@@ -469,28 +504,30 @@ def preencher_informacoes_finais(driver):
 
 # No arquivo bot_shopee.py
 
-def cadastrar_produto_completo(driver, caminho_imagem, nome_produto):
+def cadastrar_produto_completo(driver, caminho_imagem, nome_produto, nome_colecao):
     """
     Função Wrapper que chama todos os passos do cadastro.
     """
-    print(f"\nINICIANDO CADASTRO: {nome_produto}")
+    print(f"\n🚀 INICIANDO CADASTRO: {nome_produto} (Coleção: {nome_colecao})")
     
-    # 0. Garante que está na tela de Adicionar Produto
-    url_add = "https://seller.shopee.com.br/portal/product/new"
-    if url_add not in driver.current_url:
-        driver.get(url_add)
-        time.sleep(3) # Espera carregar
+    # NAVEGAÇÃO FORÇADA (Reset de Estado)
 
-    # 1. Dados Básicos
-    preencher_dados_basicos(driver, caminho_imagem, nome_produto)
-    
-    # 2. Categoria
+    url_add = "https://seller.shopee.com.br/portal/product/new"
+    driver.get(url_add)
+
+    preencher_dados_basicos(driver, caminho_imagem, nome_produto, nome_colecao)
+
     selecionar_categoria(driver)
     
-    # 3. Descrição
-    colar_descricao(driver)
+    preencher_atributos(driver, 
+                        marca="Taberna e Goblins", 
+                        material="Resin", 
+                        peso="30g", 
+                        estilo="Fantasy", 
+                        quantidade=1)
     
-    # Informações Finais
+    colar_descricao(driver)
+
     preencher_informacoes_finais(driver)
     
     print(f"✨ PRODUTO {nome_produto} FINALIZADO!")
@@ -524,8 +561,6 @@ if __name__ == "__main__":
         
         colar_descricao(driver)
         
-        
-        print("\n✅ PROCESSO FINALIZADO COM SUCESSO!")
         preencher_informacoes_finais(driver)
     
         print("\n✅ PROCESSO FINALIZADO COM SUCESSO!")
