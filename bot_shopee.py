@@ -6,6 +6,8 @@ from selenium.webdriver.support import expected_conditions as EC
 import undetected_chromedriver as uc
 from selenium.webdriver.common.keys import Keys
 from selenium.common.exceptions import StaleElementReferenceException
+import keyboard  
+import sys
 
 # ==============================================================================
 # CONFIGURAÇÕES (CONSTANTES)
@@ -17,6 +19,20 @@ CAMINHO_PERFIL = os.path.join(CAMINHO_PROJETO, "Perfil_Bot_Shopee")
 # ==============================================================================
 # FUNÇÕES AUXILIARES
 # ==============================================================================
+
+def verificar_parada():
+    """Verifica se a tecla de emergência (ESC) foi pressionada."""
+    if keyboard.is_pressed('esc'):
+        print("\n\n🛑 PARADA DE EMERGÊNCIA ACIONADA PELO USUÁRIO!")
+        print("Finalizando processos com segurança...")
+        sys.exit(0)
+
+def dormir(segundos):
+    """Substituto inteligente para time.sleep que checa o ESC."""
+    fim = time.time() + segundos
+    while time.time() < fim:
+        verificar_parada()
+        time.sleep(0.1)
 
 def esperar_upload_ou_matar(driver, timeout=5): 
     """
@@ -37,6 +53,7 @@ def esperar_upload_ou_matar(driver, timeout=5):
         raise Exception("Falha no Upload da Imagem (Timeout)")
 
 def preencher_atributo_dinamico(driver, titulo_campo, valor_para_selecionar):
+    verificar_parada()
     wait = WebDriverWait(driver, 10)
     print(f"\n--- Preenchendo: {titulo_campo} -> {valor_para_selecionar} ---")
 
@@ -53,7 +70,7 @@ def preencher_atributo_dinamico(driver, titulo_campo, valor_para_selecionar):
                 
                 # Scroll para garantir foco
                 driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", input_qtd)
-                time.sleep(0.5)
+                dormir(0.5)
 
                 # 2. LIMPAR E DIGITAR
                 # Inputs numéricos as vezes bugam com .clear(), então clicamos primeiro
@@ -87,7 +104,7 @@ def preencher_atributo_dinamico(driver, titulo_campo, valor_para_selecionar):
         else:
             xpath_campo = f"//div[contains(@class, 'attribute-select-item')][.//div[contains(@class, 'edit-label') and contains(., '{titulo_campo}')]]//div[contains(@class, 'edit-row-right-medium')]"
             campo_select = espera_click(driver, xpath_campo)
-        time.sleep(1) 
+        dormir(1) 
         
 
         # Lógica especifica para Material e Estilo
@@ -99,10 +116,10 @@ def preencher_atributo_dinamico(driver, titulo_campo, valor_para_selecionar):
                 xpath_add = "//div[contains(text(), 'Adicionar um novo item')] | //span[contains(., 'Adicionar um novo item')]"
                 btn_add = wait.until(EC.visibility_of_element_located((By.XPATH, xpath_add)))
                 driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", btn_add)
-                time.sleep(1)
+                dormir(1)
                 driver.execute_script("arguments[0].click();", btn_add)
                 
-                time.sleep(1) 
+                dormir(1) 
 
                 # Digitar no input dentro da UL
                 xpath_input = "//ul//input[@placeholder='Inserir' or @placeholder='Enter' or @placeholder='Please Input']"
@@ -116,12 +133,12 @@ def preencher_atributo_dinamico(driver, titulo_campo, valor_para_selecionar):
                 input_novo.send_keys(valor_para_selecionar)
                 print(f"✅ Texto '{valor_para_selecionar}' enviado!")
 
-                time.sleep(1)
+                dormir(1)
 
                 # Confirmar 
                 xpath_confirmar = "//ul//button"
                 espera_click(driver, xpath_confirmar)
-                time.sleep(DELAY_PADRAO)
+                dormir(DELAY_PADRAO)
                 print("✅ Item criado e selecionado!")
 
             except Exception as e:
@@ -143,7 +160,7 @@ def preencher_atributo_dinamico(driver, titulo_campo, valor_para_selecionar):
                 input_busca.click()
                 input_busca.clear()
                 input_busca.send_keys(valor_para_selecionar)
-                time.sleep(1.5) # Tempo para a lista filtrar
+                dormir(1.5) # Tempo para a lista filtrar
             except:
                 print("   -> Campo de busca não encontrado, procurando direto na lista.")
 
@@ -158,7 +175,7 @@ def preencher_atributo_dinamico(driver, titulo_campo, valor_para_selecionar):
             except:
                 print(f"❌ Não encontrei a opção '{valor_para_selecionar}' na lista.")
 
-        time.sleep(0.5)
+        dormir(0.5)
 
     except Exception as e:
         print(f"⚠️ Erro fatal ao tentar preencher {titulo_campo}: {e}")
@@ -180,6 +197,9 @@ def espera_click(driver, xpath, timeout=10, scroll=True):
         driver.execute_script(
             "arguments[0].scrollIntoView({block:'center'});", el
         )
+
+    verificar_parada()
+
     el.click()
     return el
 
@@ -189,6 +209,9 @@ def espera_input(driver, xpath, timeout=10):
     )
     driver.execute_script("arguments[0].scrollIntoView({block:'center'});", el)
     driver.execute_script("arguments[0].click();", el)
+    
+    verificar_parada()
+
     el.send_keys(Keys.CONTROL + "a")
     el.send_keys(Keys.BACK_SPACE)
     return el
@@ -200,7 +223,7 @@ def limpar_input(el):
        
 
 # ==============================================================================
-# FUNÇÕES DO BOT
+# LÓGICA DE PREENCHIMENTO DO BOT
 # ==============================================================================
 def iniciar_driver():
     """Configura e retorna o driver do Chrome com o perfil carregado."""
@@ -258,13 +281,13 @@ def preencher_dados_basicos(driver, caminho_imagem, nome_produto, nome_colecao):
             
         except StaleElementReferenceException:
             print("⚠️ Página atualizou. Tentando campo 'Nome' novamente...")
-            time.sleep(2) 
+            dormir(2) 
         except Exception as e:
             print(f"❌ Erro genérico no nome: {e}")
             raise e 
-    # 1.3 Botão Próximo
+    # Botão Próximo
     print("Avançando para próxima tela...")
-    time.sleep(DELAY_PADRAO) 
+    dormir(DELAY_PADRAO) 
     xpath_botao = "//button[contains(., 'Next Step') or contains(., 'Próximo')]"
     
     try:
@@ -439,9 +462,9 @@ def preencher_informacoes_finais(driver):
             xpath_dim = f"//div[@data-product-edit-field-unique-id='{dim}']//input[contains(@placeholder, '{dimensoesPlaceholder[dimensoes.index(dim)]}')]"
             input_dim = espera_input(driver, xpath_dim)
             input_dim.send_keys("10")
-            time.sleep(0.3)
+            dormir(0.3)
 
-        time.sleep(1.5)
+        dormir(1.5)
 
         # Click swith de retirada
         try:
@@ -454,7 +477,7 @@ def preencher_informacoes_finais(driver):
             if "eds-switch--open" in classes_do_elemento:
                 print(" -> Switch Retirada estava ATIVADO. Desativando...")
                 switch_el.click()
-                time.sleep(0.5) 
+                dormir(0.5) 
                 
         except Exception as e:
             print(f"Não foi possível verificar o switch de Retirada: {e}")
@@ -467,7 +490,7 @@ def preencher_informacoes_finais(driver):
             xpath_sim = "//div[@data-product-edit-field-unique-id='preOrder']//label[.//span[normalize-space()='Sim']]"
             btn_sim = wait.until(EC.element_to_be_clickable((By.XPATH, xpath_sim    )))
             driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block : 'center'});", btn_sim)
-            time.sleep(DELAY_PADRAO)
+            dormir(DELAY_PADRAO)
             btn_sim.click()
             print("Pré-encomenda ativada.")
 
@@ -476,12 +499,12 @@ def preencher_informacoes_finais(driver):
 
         # Definindo 7 dias para pré-encomenda
         print(" -> Definindo 7 dias...")
-        time.sleep(DELAY_PADRAO + 1)
+        dormir(DELAY_PADRAO + 1)
         xpath_dias = "//div[contains(@class, 'pre-order-input')]//input[contains(@placeholder, '0')]"
         input_dias = espera_input(driver, xpath_dias)
         input_dias.send_keys("7")
 
-        time.sleep(DELAY_PADRAO)
+        dormir(DELAY_PADRAO)
     except Exception as e:
         print(f"❌ Erro na sessão de envio: {e}")
 
@@ -516,10 +539,10 @@ def cadastrar_produto_completo(driver, caminho_imagem, nome_produto, nome_coleca
 
             url_add = "https://seller.shopee.com.br/portal/product/new"
             driver.get(url_add)
-            time.sleep(3) 
+            dormir(3) 
 
             # ==================================================================
-            # EXECUÇÃO DOS PASSOS
+            # EXECUÇÃO DO PREENCHIMENTO
             # ==================================================================
 
             preencher_dados_basicos(driver, caminho_imagem, nome_produto, nome_colecao)
@@ -540,7 +563,7 @@ def cadastrar_produto_completo(driver, caminho_imagem, nome_produto, nome_coleca
             # ==================================================================
             
             print(f"✨ PRODUTO {nome_produto} FINALIZADO COM SUCESSO!")
-            time.sleep(2) 
+            dormir(2) 
             return
 
         except Exception as e:
@@ -548,13 +571,13 @@ def cadastrar_produto_completo(driver, caminho_imagem, nome_produto, nome_coleca
             
             if tentativa < max_tentativas:
                 print("♻️  Recarregando página para tentar novamente...")
-                time.sleep(2)
+                dormir(2)
             else:
                 print(f"❌  Esgotadas as {max_tentativas} tentativas para {nome_produto}.")
                 raise e
 
 # ==============================================================================
-# ORQUESTRADOR (MAIN)
+# PARA TESTES
 # ==============================================================================
 if __name__ == "__main__":
     
@@ -566,7 +589,7 @@ if __name__ == "__main__":
     
     try:
         print("Acessando Shopee...")
-        time.sleep(5)
+        dormir(5)
     
         preencher_dados_basicos(driver, FOTO_DO_DIA, NOME_DO_DIA, NOME_COLECAO)
         

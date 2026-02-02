@@ -2,15 +2,6 @@ import os
 import shutil
 import time
 from tqdm import tqdm  
-import keyboard  
-import sys
-
-def verificar_parada():
-    """Verifica se a tecla de emergência (ESC) foi pressionada."""
-    if keyboard.is_pressed('esc'):
-        print("\n\n🛑 PARADA DE EMERGÊNCIA ACIONADA PELO USUÁRIO!")
-        print("Finalizando processos com segurança...")
-        sys.exit(0)
 
 # --- IMPORTS DOS SEUS MÓDULOS ---
 from bot_shopee import iniciar_driver, cadastrar_produto_completo
@@ -59,8 +50,7 @@ def fluxo_processamento():
     with tqdm(total=len(lista_tarefas), desc="Processando", unit="img", colour="blue") as barra:
         for caminho_origem, nome_arquivo, nome_colecao in lista_tarefas:
             
-            verificar_parada()
-            
+
             pasta_destino = os.path.join(DIR_PROC, nome_colecao)
             os.makedirs(pasta_destino, exist_ok=True)
             
@@ -124,7 +114,6 @@ def fluxo_cadastro():
         with tqdm(total=len(lista_tarefas), desc="Cadastrando", unit="prod", colour="green") as barra:
             for caminho_img, nome_arquivo, nome_colecao in lista_tarefas:
                 
-                verificar_parada()
 
                 nome_produto = os.path.splitext(nome_arquivo)[0]
                 tqdm.write(f"\n➡️  Iniciando: {nome_produto} | Coleção: {nome_colecao}")
