@@ -232,14 +232,16 @@ def iniciar_driver(headless=False):
     options.add_argument(f"--user-data-dir={CAMINHO_PERFIL}")
     options.add_argument("--no-first-run --no-service-autorun --password-store=basic")
 
+    options.add_argument("--window-size=1080,720") 
+    
     # --- OTIMIZAÇÃO POR PREFS ---
     prefs = {
         
-        # SEGURANÇA: Manter IMAGENS ativadas (Crucial para o upload funcionar)
+        # Manter IMAGENS ativadas
         "profile.managed_default_content_settings.images": 1,
         "profile.default_content_setting_values.images": 1,
         
-        # OTIMIZAÇÃO: Bloquear coisas inúteis que gastam RAM
+        # Bloquear coisas inúteis que gastam RAM
         "profile.default_content_setting_values.notifications": 2,
         "profile.default_content_setting_values.geolocation": 2,
         "profile.default_content_setting_values.media_stream_mic": 2,
@@ -265,11 +267,10 @@ def iniciar_driver(headless=False):
     if headless:
         print("👻 Modo Invisível (Headless) Ativado!")
         options.add_argument("--headless=new") 
-        options.add_argument("--window-size=1080,720") 
-    else:
-        options.add_argument("--start-maximized")
+   
+
     driver = uc.Chrome(options=options, version_main=144)
-    
+    driver.set_window_size(1080, 720)
         
     return driver
 

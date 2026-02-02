@@ -107,7 +107,7 @@ def fluxo_cadastro():
 
     if modo_invisivel:
         print("⚠️  AVISO: No modo invisível você NÃO conseguirá fazer login manual.")
-        print("Use apenas se já estiver logado no perfil anteriormente.")
+        print("   Use apenas se já estiver logado no perfil anteriormente.")
         time.sleep(2)
    
     # Inicia driver
