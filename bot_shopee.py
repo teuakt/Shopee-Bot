@@ -214,7 +214,7 @@ def iniciar_driver():
     driver = uc.Chrome(options=options, version_main=144)
     return driver
 
-def preencher_dados_basicos(driver, caminho_imagem, nome_produto):
+def preencher_dados_basicos(driver, caminho_imagem, nome_produto, nome_colecao):
     """
     PASSO 1: Faz upload da foto e preenche o nome do produto.
     """
@@ -238,7 +238,7 @@ def preencher_dados_basicos(driver, caminho_imagem, nome_produto):
         print("Preenchendo nome...")
         xpath_nome = "//input[@placeholder='Nome da Marca + Tipo do Produto + Atributos-chave (Materiais, Cores, Tamanho, Modelo)']"
         campo_nome = espera_click(driver, xpath_nome)
-        campo_nome.send_keys(f"Miniatura RPG Taberna e Goblins {nome_produto} - Resina 3D")
+        campo_nome.send_keys(f"Miniatura RPG - Coleção {nome_colecao} - {nome_produto} - Taverna e Goblins - Impressão 3D Resina")
     except Exception as e:
         print(f"Erro no nome: {e}")
     
@@ -417,8 +417,12 @@ def preencher_informacoes_finais(driver):
 
         time.sleep(1.5)
         # Click swith de retirada
-        switch_retirada = "//div[contains(@class,'logistics-item-ui-t1')][.//div[contains(normalize-space(.), 'Retirada')]]//div[contains(@class,'eds-switch')]"
-        espera_click(driver, switch_retirada)      
+        try:
+            switch_retirada = "//div[contains(@class,'logistics-item-ui-t1')][.//div[contains(normalize-space(.), 'Retirada')]]//div[contains(@class,'eds-switch--open')]"
+            espera_click(driver, switch_retirada)   
+        except Exception as e:
+            print(f"Retirada já desativada ou erro ao clicar: {e}")
+            pass   
 
         # SOB ENCOMENDA 
         print("Configurando Pré-Encomenda")
@@ -497,9 +501,9 @@ def cadastrar_produto_completo(driver, caminho_imagem, nome_produto):
 # ==============================================================================
 if __name__ == "__main__":
     
-    NOME_DO_DIA = 'Anathema'
-    FOTO_DO_DIA = os.path.abspath(f"images/processadas/Bite the bullet/{NOME_DO_DIA}.jpg")
-    
+    NOME_DO_DIA = 'Beholder'
+    FOTO_DO_DIA = os.path.abspath(f"images/teste_saida/Bite the bullet/{NOME_DO_DIA}.jpg")
+    NOME_COLECAO = os.path.basename(os.path.dirname(FOTO_DO_DIA))
     # Iniciando
     driver = iniciar_driver()
     
@@ -507,7 +511,7 @@ if __name__ == "__main__":
         print("Acessando Shopee...")
         time.sleep(5)
     
-        preencher_dados_basicos(driver, FOTO_DO_DIA, NOME_DO_DIA)
+        preencher_dados_basicos(driver, FOTO_DO_DIA, NOME_DO_DIA, NOME_COLECAO)
         
         selecionar_categoria(driver)
         
