@@ -1,16 +1,26 @@
 from PIL import Image, ImageEnhance, ImageStat, ImageOps
 import os
 import re
-import json
+
 
 # CONFIGURAÇÕES GERAIS
 
 PASTA_ENTRADA = "./images/originais"
 PASTA_SAIDA = "./images/processadas"
-CAMINHO_LOGO = "./resources/logo.png"
-TAMANHO_MAXIMO = 1024
+CAMINHO_LOGO = "./images/logo.png"
+TAMANHO_MAXIMO = 1024 
 
-# FUNÇÕES AUXILIARES
+# FUNÇÕES UTILITÁRIAS
+
+def limpar_e_formatar_nome(nome_arquivo_sujo):
+    """Limpa caracteres estranhos e formata o nome para padronizado, 
+       facilitando a identificação de produtos."""
+    nome = os.path.splitext(nome_arquivo_sujo)[0]
+    if "-D-" in nome:
+        nome = nome.split("-D-")[0]
+    nome = nome.replace("_", " ")
+    nome = re.sub(r'(?<!^)(?=[A-Z])', ' ', nome)
+    return nome
 
 def verificar_area_ocupada(imagem_base, x, y, largura_logo, altura_logo, limiar_sensibilidade=50):
     """Verifica se a área onde o logo vai ficar já tem muita informação, se sim, retorna True."""
@@ -41,18 +51,26 @@ def tornar_quadrada(imagem_original, cor_fundo=(255, 255, 255)):
     
     return imagem_final
 
-def sanitarizar_nome(nome):
-    """Remove caracteres proibidos pelo Windows/Linux"""
-    return re.sub(r'[<>:"/\\|?*]', '', nome).strip()
-
 # O PROCESSADOR 
 
-def processar_imagem_unica(caminho_entrada, caminho_saida_completo, usar_logo=True):
-    if os.path.exists(caminho_saida_completo):
-        print(f" -> Já existe: {os.path.basename(caminho_saida_completo)}")
-        return
+def processar_unica_imagem(caminho_entrada, pasta_destino, usar_logo=True):
+    # Filtro de Extensão 
+    if not caminho_entrada.lower().endswith(('.png', '.jpg', '.jpeg', '.webp')):
+        return None 
 
+    # Prepara o nome limpo e caminho final
+    nome_original = os.path.basename(caminho_entrada)
+    nome_limpo = limpar_e_formatar_nome(nome_original) + ".jpg"
+    
+    caminho_saida_final = os.path.join(pasta_destino, nome_limpo)
+
+    # Verifica Duplicata 
+    if os.path.exists(caminho_saida_final):
+        print(f"  -> Pulando {nome_limpo} (Já existe).")
+        return caminho_saida_final
+    
     try:
+        # Abre a imagem e corrige caso haja rotação via EXIF
         img = Image.open(caminho_entrada)
         img = ImageOps.exif_transpose(img)
         
@@ -96,71 +114,36 @@ def processar_imagem_unica(caminho_entrada, caminho_saida_completo, usar_logo=Tr
                 img.paste(logo, (pos1_x, pos1_y), logo)
 
         # Conversão para RGB
-        if not os.path.exists(caminho_saida_completo):
-            os.makedirs(os.path.dirname(caminho_saida_completo), exist_ok=True)
+        if not os.path.exists(pasta_destino):
+            os.makedirs(pasta_destino)
 
-        img.convert("RGB").save(caminho_saida_completo, "JPEG", quality=85, optimize=True)
-        print(f"Sucesso: {os.path.basename(caminho_saida_completo)}")
+        img.convert("RGB").save(caminho_saida_final, "JPEG", quality=85, optimize=True)
+        print(f"Sucesso: {os.path.basename(pasta_destino)}")
+        return caminho_saida_final
 
     except Exception as e:
         print(f"Erro em {os.path.basename(caminho_entrada)}: {e}")
+        return None 
 
-def executar_pipeline(json_dados):
-    print(f"🚀 Iniciando processamento em massa...")
-    
-    erros = 0
-    sucessos = 0
 
-    for produto in json_dados:
-        # Pega a Coleção direto do JSON (Sua Fonte da Verdade)
-        nome_colecao_origem = produto.get('collection_name', '').strip()
-        nome_produto = sanitarizar_nome(produto['product_name'])
-        
-        for variacao in produto['variations']:
-            nome_variacao = sanitarizar_nome(variacao['variation_name'])
-            
-            for imagem_info in variacao['images']:
-                # PROBLEMA ANTIGO: imagem_info['filename'] vinha como "Colecao/Arquivo.jpg"
-                # SOLUÇÃO: Usamos os.path.basename para pegar só "Arquivo.jpg"
-                arquivo_bruto = imagem_info['filename']
-                nome_arquivo_puro = os.path.basename(arquivo_bruto) 
-
-                # MONTAGEM DIRETA DO CAMINHO (Sem "localizar_arquivo")
-                # Caminho = ./images/originais / NomeColecao / NomeArquivo.jpg
-                caminho_origem = os.path.join(PASTA_ENTRADA, nome_colecao_origem, nome_arquivo_puro)
-                
-                # Definindo nome final
-                tipo_visao = imagem_info['view_type']
-                if nome_variacao.lower() in ["padrão", "padrao", "default", "standard"]:
-                    novo_nome = f"{nome_produto} - {tipo_visao}.jpg"
-                else:
-                    novo_nome = f"{nome_produto} - {nome_variacao} - {tipo_visao}.jpg"
-
-                # Define destino: ./images/processadas / NomeColecao / NovoNome.jpg
-                pasta_destino_colecao = os.path.join(PASTA_SAIDA, sanitarizar_nome(nome_colecao_origem))
-                caminho_destino = os.path.join(pasta_destino_colecao, novo_nome)
-
-                # Verifica existência
-                if os.path.exists(caminho_origem):
-                    processar_imagem_unica(caminho_origem, caminho_destino)
-                    sucessos += 1
-                else:
-                    # Tentativa de fallback: às vezes o nome da coleção no JSON vem um pouco diferente da pasta
-                    print(f"⚠️ Arquivo não encontrado: {caminho_origem}")
-                    print(f"   (Buscado em: {nome_colecao_origem} -> {nome_arquivo_puro})")
-                    erros += 1
-
-    print(f"\n🏁 Relatório Final: {sucessos} processados, {erros} erros.")
- 
- 
 # Testes
 if __name__ == "__main__":
-    if not os.path.exists(PASTA_ENTRADA):
-        print(f"Erro: A pasta {PASTA_ENTRADA} não existe.")
+    # Processar tudo
+
+    # Teste unitário em uma imagem específica
+    print("🧪 Modo de Teste Unitário Ativado")
+    
+    # Path da pasta de teste
+    pasta_entrada_teste = "./images/processadas/Bite the bullet/" 
+    pasta_saida_teste = "./images/teste_saida/"
+    processar_unica_imagem(os.path.join(pasta_entrada_teste, "Anathema.jpg"), os.path.join(pasta_saida_teste, "teste_saida.jpg"))
+    
+
+    if os.path.exists(pasta_entrada_teste):
+        for f in os.listdir(pasta_entrada_teste):
+            arquivo_teste = os.path.join(pasta_entrada_teste, f)
+            saida_teste = os.path.join(pasta_saida_teste, limpar_e_formatar_nome(f) + ".jpg")
+            processar_unica_imagem(arquivo_teste, saida_teste)
     else:
-        try:
-            with open("mapa_global.json", "r", encoding="utf-8") as f:
-                dados = json.load(f)
-            executar_pipeline(dados)
-        except FileNotFoundError:
-            print("❌ Arquivo 'mapa_global.json' não encontrado. Rode o organizador primeiro.")
+        print(f"Pasta de teste não encontrada: {pasta_entrada_teste}")
+        print("Edite a variável 'pasta_entrada_teste' no final do script.")
