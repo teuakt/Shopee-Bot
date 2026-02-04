@@ -152,6 +152,7 @@ def executar_pipeline(json_dados):
 
     print(f"\n🏁 Relatório Final: {sucessos} processados, {erros} erros.")
  
+ 
 # Testes
 if __name__ == "__main__":
     if not os.path.exists(PASTA_ENTRADA):
