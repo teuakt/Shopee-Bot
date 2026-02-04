@@ -75,6 +75,10 @@ def gerar_mapa_unificado(pasta_raiz_originais, arquivo_saida="mapa_global.json")
     # Regras de Tradução (CRÍTICO)
     - Criaturas genéricas -> TRADUZIR para PT-BR (Human Mage -> Mago Humano).
     - Nomes Próprios/Clássicos -> MANTER em Inglês (Beholder, Lich).
+    - Exemplos: "Dragon" = "Dragão", "Dwarf" = "Anão", "Elf" = "Elfo", "Owlbear" = "Urso-Coruja", etc.
+    - Use sempre nomes comuns em RPG de mesa, como livros do d&d e etc.
+    - Se estiver em dúvida, mantenha o nome em Inglês.
+    - Separe nomes compostos com hífen (ex: "Dragonborn" = "Dracônico", 'Owlbear' = "Urso-Coruja"). 
 
     # Lista de Arquivos para Processar:
     {json.dumps(lista_arquivos_com_caminho, indent=2)}
@@ -97,7 +101,7 @@ def gerar_mapa_unificado(pasta_raiz_originais, arquivo_saida="mapa_global.json")
         with open(arquivo_saida, "w", encoding="utf-8") as f:
             json.dump(dados, f, indent=2, ensure_ascii=False)
             
-        print(f"\n🌎 MAPA GLOBAL UNIFICADO GERADO!")
+        print(f"\n🌎 MAPA GLOBAL GERADO!")
         print(f"Produtos identificados: {len(dados)}")
         print(f"Salvo em: {arquivo_saida}")
         return dados
