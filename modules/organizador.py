@@ -1,5 +1,6 @@
 import os
 import json
+import re
 from google import genai
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
@@ -7,7 +8,12 @@ from dotenv import load_dotenv
 load_dotenv()
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
-# --- MODELOS (Mantemos os mesmos, são ótimos) ---
+# --- Função auxiliar
+def sanitarizar_nome(nome):
+    """Remove caracteres proibidos pelo Windows/Linux"""
+    return re.sub(r'[<>:"/\\|?*]', '', nome).strip()
+
+# --- MODELOS ---
 class ImagemDetalhe(BaseModel):
     filename: str = Field(description="Nome EXATO do arquivo original (incluindo extensão)")
     view_type: str = Field(description="Visão (front, back, side, detail)")
@@ -71,11 +77,12 @@ def gerar_mapa_unificado(pasta_raiz_originais, arquivo_saida="mapa_global.json")
     4. Classifique a Visão (ex: "front", "back", "side", "close_up", "showcase").
     5. Algumas possuem, como um dos ultimos nomes, palavras como 'Black' ou 'Red' que indicam 
     variações de cor de fundo, o que nao é relevante.
-  
+    6. Se o view repetir para um determinado produto e coleção, adicione um sufixo numérico para diferenciá-lo.
+    
     # Regras de Tradução (CRÍTICO)
     - Criaturas genéricas -> TRADUZIR para PT-BR (Human Mage -> Mago Humano).
     - Nomes Próprios/Clássicos -> MANTER em Inglês (Beholder, Lich).
-    - Exemplos: "Dragon" = "Dragão", "Dwarf" = "Anão", "Elf" = "Elfo", "Owlbear" = "Urso-Coruja", etc.
+    - Exemplos: "Dragon" = "Dragão", "Dwarf" = "Anão", "Unchained Immortals" = "Imortais Libertos", "Owlbear" = "Urso-Coruja", etc.
     - Use sempre nomes comuns em RPG de mesa, como livros do d&d e etc.
     - Se estiver em dúvida, mantenha o nome em Inglês.
     - Separe nomes compostos com hífen (ex: "Dragonborn" = "Dracônico", 'Owlbear' = "Urso-Coruja"). 
@@ -85,7 +92,7 @@ def gerar_mapa_unificado(pasta_raiz_originais, arquivo_saida="mapa_global.json")
     """
 
     try:
-        # Chamada ÚNICA
+        # Chamada ÚNICA (Mantida)
         response = client.models.generate_content(
             model='gemini-3-flash-preview',
             contents=prompt,
@@ -94,20 +101,39 @@ def gerar_mapa_unificado(pasta_raiz_originais, arquivo_saida="mapa_global.json")
                 'response_schema': list[ProdutoRPG]
             }
         )
-        
         dados = json.loads(response.text)
         
-        # 3. Salvar
+        # --- NOVIDADE: PÓS-PROCESSAMENTO DETERMINÍSTICO ---
+        print("⚙️ Calculando nomes de arquivos finais...")
+        
+        for produto in dados:
+            nome_prod_safe = sanitarizar_nome(produto['product_name'])
+            
+            for variacao in produto['variations']:
+                nome_var_safe = sanitarizar_nome(variacao['variation_name'])
+                
+                for imagem in variacao['images']:
+                    tipo_visao = imagem['view_type']
+                    
+                    # Lógica de Negócio (Centralizada AQUI)
+                    if nome_var_safe.lower() in ["padrão", "padrao", "default", "standard"]:
+                        # Ex: Beholder - Front.jpg
+                        novo_nome = f"{nome_prod_safe} - {tipo_visao}.jpg"
+                    else:
+                        # Ex: Orc - Machado - Front.jpg
+                        novo_nome = f"{nome_prod_safe} - {nome_var_safe} - {tipo_visao}.jpg"
+                    
+                    # Injetamos o campo novo no JSON
+                    imagem['target_filename'] = novo_nome
+
+        # 3. Salvar (Agora com o target_filename incluso)
         with open(arquivo_saida, "w", encoding="utf-8") as f:
             json.dump(dados, f, indent=2, ensure_ascii=False)
             
-        print(f"\n🌎 MAPA GLOBAL GERADO!")
-        print(f"Produtos identificados: {len(dados)}")
-        print(f"Salvo em: {arquivo_saida}")
         return dados
 
     except Exception as e:
-        print(f"❌ Erro Fatal no Batch: {e}")
+        print(f"❌ Erro: {e}")
         return []
 
 if __name__ == "__main__":

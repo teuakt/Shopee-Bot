@@ -11,6 +11,9 @@ CAMINHO_LOGO = "./resources/logo.png"
 TAMANHO_MAXIMO = 1024
 
 # FUNÇÕES AUXILIARES
+def sanitarizar_nome(nome):
+    """Remove caracteres proibidos pelo Windows/Linux"""
+    return re.sub(r'[<>:"/\\|?*]', '', nome).strip()
 
 def verificar_area_ocupada(imagem_base, x, y, largura_logo, altura_logo, limiar_sensibilidade=50):
     """Verifica se a área onde o logo vai ficar já tem muita informação, se sim, retorna True."""
@@ -40,10 +43,6 @@ def tornar_quadrada(imagem_original, cor_fundo=(255, 255, 255)):
         imagem_final.paste(imagem_original, (pos_x, pos_y))
     
     return imagem_final
-
-def sanitarizar_nome(nome):
-    """Remove caracteres proibidos pelo Windows/Linux"""
-    return re.sub(r'[<>:"/\\|?*]', '', nome).strip()
 
 # O PROCESSADOR 
 
@@ -106,51 +105,42 @@ def processar_imagem_unica(caminho_entrada, caminho_saida_completo, usar_logo=Tr
         print(f"Erro em {os.path.basename(caminho_entrada)}: {e}")
 
 def executar_pipeline(json_dados):
-    print(f"🚀 Iniciando processamento em massa...")
+    print(f"🚀 Iniciando processamento obediente...")
     
-    erros = 0
-    sucessos = 0
-
     for produto in json_dados:
-        # Pega a Coleção direto do JSON (Sua Fonte da Verdade)
-        nome_colecao_origem = produto.get('collection_name', '').strip()
-        nome_produto = sanitarizar_nome(produto['product_name'])
+        # A coleção continua vindo do JSON
+        nome_colecao_safe = sanitarizar_nome(produto.get('collection_name', 'Geral'))
+        
+        # Cria a pasta da coleção no destino
+        pasta_destino_colecao = os.path.join(PASTA_SAIDA, nome_colecao_safe)
         
         for variacao in produto['variations']:
-            nome_variacao = sanitarizar_nome(variacao['variation_name'])
-            
             for imagem_info in variacao['images']:
-                # PROBLEMA ANTIGO: imagem_info['filename'] vinha como "Colecao/Arquivo.jpg"
-                # SOLUÇÃO: Usamos os.path.basename para pegar só "Arquivo.jpg"
-                arquivo_bruto = imagem_info['filename']
-                nome_arquivo_puro = os.path.basename(arquivo_bruto) 
-
-                # MONTAGEM DIRETA DO CAMINHO (Sem "localizar_arquivo")
-                # Caminho = ./images/originais / NomeColecao / NomeArquivo.jpg
-                caminho_origem = os.path.join(PASTA_ENTRADA, nome_colecao_origem, nome_arquivo_puro)
                 
-                # Definindo nome final
-                tipo_visao = imagem_info['view_type']
-                if nome_variacao.lower() in ["padrão", "padrao", "default", "standard"]:
-                    novo_nome = f"{nome_produto} - {tipo_visao}.jpg"
-                else:
-                    novo_nome = f"{nome_produto} - {nome_variacao} - {tipo_visao}.jpg"
+                # 1. ONDE ESTÁ? (Origem)
+                nome_arquivo_origem = os.path.basename(imagem_info['filename'])
+                caminho_origem = os.path.join(PASTA_ENTRADA, nome_colecao_safe, nome_arquivo_origem)
+                
+                # 2. PARA ONDE VAI? (Destino baseado no Organizador)
+                # O Processador não calcula mais nada, só lê 'target_filename'
+                novo_nome = imagem_info.get('target_filename')
+                
+                if not novo_nome:
+                    print(f"⚠️ Erro: JSON sem 'target_filename' para {nome_arquivo_origem}")
+                    continue
 
-                # Define destino: ./images/processadas / NomeColecao / NovoNome.jpg
-                pasta_destino_colecao = os.path.join(PASTA_SAIDA, sanitarizar_nome(nome_colecao_origem))
                 caminho_destino = os.path.join(pasta_destino_colecao, novo_nome)
-
-                # Verifica existência
+                
+                # 3. Executa
                 if os.path.exists(caminho_origem):
-                    processar_imagem_unica(caminho_origem, caminho_destino)
-                    sucessos += 1
+                    sucesso = processar_imagem_unica(caminho_origem, caminho_destino) # Sua função visual
+                    
+                    # Se deu certo, atualizamos o path final para o Bot saber
+                    if sucesso: # Assumindo que sua função retorna algo, ou verificamos exists depois
+                        imagem_info['processed_path'] = caminho_destino
                 else:
-                    # Tentativa de fallback: às vezes o nome da coleção no JSON vem um pouco diferente da pasta
-                    print(f"⚠️ Arquivo não encontrado: {caminho_origem}")
-                    print(f"   (Buscado em: {nome_colecao_origem} -> {nome_arquivo_puro})")
-                    erros += 1
+                    print(f"⚠️ Origem não encontrada: {caminho_origem}")
 
-    print(f"\n🏁 Relatório Final: {sucessos} processados, {erros} erros.")
  
  
 # Testes
