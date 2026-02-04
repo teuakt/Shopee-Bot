@@ -1,13 +1,16 @@
 import os
 import time
+import json
+import keyboard  
+import sys
+import re
+import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-import undetected_chromedriver as uc
 from selenium.webdriver.common.keys import Keys
 from selenium.common.exceptions import StaleElementReferenceException
-import keyboard  
-import sys
+
 
 # ==============================================================================
 # CONFIGURAÇÕES (CONSTANTES)
@@ -15,16 +18,55 @@ import sys
 DELAY_PADRAO = 0.5
 CAMINHO_PROJETO = os.getcwd()
 CAMINHO_PERFIL = os.path.join(CAMINHO_PROJETO, "Perfil_Bot_Shopee")
+ARQUIVO_MAPA = "mapa_global.json"
 
 # ==============================================================================
 # FUNÇÕES AUXILIARES
 # ==============================================================================
+def sanitarizar_nome(nome):
+    """Remove caracteres proibidos (Igual ao Processador)"""
+    return re.sub(r'[<>:"/\\|?*]', '', nome).strip()
+
+def encontrar_imagem_no_disco(produto, variacao, imagem_obj):
+    """
+    Tenta encontrar a imagem processada usando o processed_path OU calculando o nome.
+    """
+    # 1. Tenta pelo caminho gravado no JSON (Cenário Ideal)
+    caminho_json = imagem_obj.get('processed_path')
+    if caminho_json and os.path.exists(caminho_json):
+        return os.path.abspath(caminho_json)
+
+    # 2. Se falhou, vamos calcular onde o Processador deveria ter salvado
+    # Base: ./images/processadas / NomeColecao
+    nome_colecao = sanitarizar_nome(produto.get('collection_name', 'Geral'))
+    pasta_colecao = os.path.join(os.getcwd(), "images", "processadas", nome_colecao)
+    
+    # Se a pasta da coleção nem existe, aborta
+    if not os.path.exists(pasta_colecao):
+        return None
+
+    # Recalcula o nome do arquivo (Mesma lógica do Organizador/Processador)
+    nome_prod_safe = sanitarizar_nome(produto['product_name'])
+    nome_var_safe = sanitarizar_nome(variacao['variation_name'])
+    tipo_visao = imagem_obj['view_type']
+    
+    # Lógica de Nomenclatura
+    if nome_var_safe.lower() in ["padrão", "padrao", "default", "standard"]:
+        nome_arquivo = f"{nome_prod_safe} - {tipo_visao}.jpg"
+    else:
+        nome_arquivo = f"{nome_prod_safe} - {nome_var_safe} - {tipo_visao}.jpg"
+        
+    caminho_calculado = os.path.join(pasta_colecao, nome_arquivo)
+    
+    if os.path.exists(caminho_calculado):
+        return caminho_calculado
+        
+    return None
 
 def verificar_parada():
     """Verifica se a tecla de emergência (ESC) foi pressionada."""
     if keyboard.is_pressed('esc'):
         print("\n\n🛑 PARADA DE EMERGÊNCIA ACIONADA PELO USUÁRIO!")
-        print("Finalizando processos com segurança...")
         sys.exit(0)
 
 def dormir(segundos):
@@ -221,17 +263,51 @@ def limpar_input(el):
     el.send_keys(Keys.CONTROL + "a")
     el.send_keys(Keys.BACK_SPACE)
        
+def ordenar_por_prioridade_visual(lista_caminhos):
+    """
+    Reordena a lista de imagens para que a 'Capa' seja sempre Front/Main/Fullbody.
+    """
+    # Definição de prioridades (Menor número = Aparece primeiro)
+    termos_prioridade = {
+        "front": 0,
+        "frente": 0,
+        "main": 0,
+        "full": 1,      
+        "standard": 2, 
+        "padrao": 2,
+        "padrão": 2,
+        "side": 5,
+        "lateral": 5,
+        "angle": 6,
+        "detail": 8,
+        "back": 9,      # Costas geralmente é a última que queremos ver
+        "costas": 9,
+        "top": 9
+    }
+
+    def calcular_score(caminho):
+        nome_arquivo = os.path.basename(caminho).lower()
+        
+        for termo, score in termos_prioridade.items():
+            # Verifica se o termo está no nome do arquivo (ex: "orc - front.jpg")
+            if termo in nome_arquivo:
+                return score
+        
+        return 10 # Se não achar nada, vai pro final da fila
+
+    # O Python ordena baseado no retorno da função 'key'
+    return sorted(lista_caminhos, key=calcular_score)
 
 # ==============================================================================
 # LÓGICA DE PREENCHIMENTO DO BOT
 # ==============================================================================
+
 def iniciar_driver(headless=False):
     """Configura o driver com otimizações de performance SEGURAS."""
     print("Iniciando Driver (Modo Performance)...")
     options = uc.ChromeOptions()
     options.add_argument(f"--user-data-dir={CAMINHO_PERFIL}")
     options.add_argument("--no-first-run --no-service-autorun --password-store=basic")
-
     options.add_argument("--window-size=1080,720") 
     
     # --- OTIMIZAÇÃO POR PREFS ---
@@ -274,72 +350,46 @@ def iniciar_driver(headless=False):
         
     return driver
 
-
-def preencher_dados_basicos(driver, caminho_imagem, nome_produto, nome_colecao):
-    """
-    PASSO 1: Faz upload da foto e preenche o nome do produto.
-    """
-    print("\n--- PASSO 1: DADOS BÁSICOS ---")
+def preencher_dados_basicos(driver, lista_caminhos, nome_produto):
+    print("\n--- PASSO 1: IMAGENS (GALERIA) ---")
     wait = WebDriverWait(driver, 10)
     
-    if os.path.exists(caminho_imagem):
-        print("Procurando campo de upload...")
-        
-        campo_upload = wait.until(EC.presence_of_element_located((By.XPATH, "//input[@type='file']")))
-        campo_upload.send_keys(caminho_imagem)
-        
-        print("Arquivo enviado. Aguardando preview...")
-        esperar_upload_ou_matar(driver) # Função que espera o upload ou lança erro
-    else:
-        raise Exception(f"Imagem não encontrada no PC: {caminho_imagem}")
+    # Filtra apenas caminhos que existem e limita a 9 (limite Shopee)
+    imagens_validas = [p for p in lista_caminhos if os.path.exists(p)][:9]
+    
+    if not imagens_validas:
+        raise Exception("Nenhuma imagem válida encontrada para upload!")
 
-    # Nome
-    nome_final = f"{nome_produto} - {nome_colecao} - Impressão 3D - Miniatura RPG Taberna e Goblins - Resina 3D"
-    xpath_nome = "//input[@placeholder='Nome da Marca + Tipo do Produto + Atributos-chave (Materiais, Cores, Tamanho, Modelo)']"
-
-    for tentativa in range(3):
-        try:
-            print(f"Preenchendo nome...")
-            if tentativa > 0:
-                print(f" -> Tentativa {tentativa + 1} de 3...")
-            
-            # Busca o elemento
-            campo_nome = wait.until(EC.element_to_be_clickable((By.XPATH, xpath_nome)))
-            
-            # Clica e Limpa
-            campo_nome.click()
-            campo_nome.send_keys(Keys.CONTROL + "a")
-            campo_nome.send_keys(Keys.BACK_SPACE)
-            
-            # Digita
-            campo_nome.send_keys(nome_final)
-            
-            # Se chegou aqui sem erro, sai do loop
-            print(f" -> Título preenchido com sucesso.")
-            break 
-            
-        except StaleElementReferenceException:
-            print("⚠️ Página atualizou. Tentando campo 'Nome' novamente...")
-            dormir(2) 
-        except Exception as e:
-            print(f"❌ Erro genérico no nome: {e}")
-            raise e 
-    # Botão Próximo
-    print("Avançando para próxima tela...")
-    dormir(DELAY_PADRAO) 
-    xpath_botao = "//button[contains(., 'Next Step') or contains(., 'Próximo')]"
+    print(f"Enviando {len(imagens_validas)} imagens para a galeria...")
     
     try:
-        # Tenta clicar no botão. Se falhar, tenta via JS
-        botao_avancar = wait.until(EC.element_to_be_clickable((By.XPATH, xpath_botao)))
-        botao_avancar.click()
-    except:
-        try:
-             driver.execute_script("arguments[0].click();", driver.find_element(By.XPATH, xpath_botao))
-        except Exception as e:
-             raise Exception(f"Botão Próximo não encontrado ou não clicável: {e}")
+        # Truque: Enviar todos os caminhos de uma vez separados por \n
+        string_caminhos = "\n".join(imagens_validas)
+        
+        campo_upload = wait.until(EC.presence_of_element_located((By.XPATH, "//input[@type='file']")))
+        campo_upload.send_keys(string_caminhos)
+        esperar_upload_ou_matar(driver, timeout=10)
+        # Espera visual simples para garantir upload
+        dormir(3 + len(imagens_validas)) 
+        print("✅ Galeria preenchida.")
 
-    print("Tela 1 finalizada.")
+    except Exception as e:
+        print(f"❌ Erro na galeria: {e}")
+        raise e
+
+    # Preenche Nome
+    xpath_nome = "//input[@placeholder='Nome da Marca + Tipo do Produto + Atributos-chave (Materiais, Cores, Tamanho, Modelo)']"
+    try:
+        espera_input(driver, xpath_nome).send_keys(nome_produto[:120]) # Limite 120 chars
+        print("✅ Nome preenchido.")
+    except Exception as e:
+        print(f"❌ Erro no nome: {e}")
+
+    print("Avançando...")
+    try:
+        espera_click(driver, "//button[contains(., 'Next Step') or contains(., 'Próximo')]")
+    except:
+        print("Botão próximo não encontrado, tentando JS...")
 
 def selecionar_categoria(driver):
     """
@@ -547,24 +597,48 @@ def preencher_informacoes_finais(driver):
     except Exception as e:
         print(f"❌ Erro na sessão de envio: {e}")
 
-    try:
-        # SALVAR E NÃO PUBLICAR
-        print(" -> Salvando...")
-        
-        # Clicando "Salvar e não publicar" da página
-        xpath_salvar = "//div[contains(@class,'product-detail-button-wrapper')]//button[.//span[normalize-space()='Salvar e Não Publicar']]"
-        espera_click(driver, xpath_salvar)
 
-        # Clicando "Salvar e não publicar" do modal de confirmação
-        xpath_salvar_modal = "//div[contains(@class,'eds-modal__footer')]//button[.//span[normalize-space()='Salvar e Não Publicar']]"
-        espera_click(driver, xpath_salvar_modal)
+def preencher_envio_e_salvar(driver):
+    print("\n--- ENVIO E SALVAMENTO ---")
+    wait = WebDriverWait(driver, 10)
+
+    try:
+        # Peso e Dimensões (Mantido do seu código, apenas resumido)
+        xpath_peso = "//div[contains(@data-product-edit-field-unique-id, 'weight')]//input"
+        espera_input(driver, xpath_peso).send_keys("0.2") # 200g
+
+        dimensoes = ["width", "length", "height"]
+        for dim in dimensoes:
+            xpath_dim = f"//div[contains(@data-product-edit-field-unique-id, 'dimension.{dim}')]//input"
+            espera_input(driver, xpath_dim).send_keys("10")
         
-        print("✅ Produto salvo no rascunho com sucesso!")
+        # Pré-Encomenda (Mantido)
+        xpath_sim = "//label[.//span[normalize-space()='Sim']]"
+        try:
+            espera_click(driver, xpath_sim, timeout=3).click()
+            xpath_dias = "//div[contains(@class, 'pre-order-input')]//input"
+            espera_input(driver, xpath_dias).send_keys("7")
+        except:
+            print("Não consegui ativar pré-encomenda (ou já estava).")
+
+        # SALVAR
+        print(" -> Salvando Rascunho...")
+        xpath_salvar = "//button[.//span[contains(normalize-space(.), 'Salvar e Não Publicar')]]"
+        espera_click(driver, xpath_salvar)
+        
+        # Modal confirmação (as vezes aparece, as vezes não)
+        try:
+            xpath_confirm_modal = "//div[contains(@class,'eds-modal')]//button[contains(., 'Salvar')]"
+            espera_click(driver, xpath_confirm_modal, timeout=3)
+        except:
+            pass
+
+        print("✅ Produto salvo!")
 
     except Exception as e:
-        print(f"❌ Erro na etapa final: {e}")
+        print(f"❌ Erro ao salvar: {e}")
 
-# No arquivo bot_shopee.py
+# Função Principal
 
 def cadastrar_produto_completo(driver, caminho_imagem, nome_produto, nome_colecao, max_tentativas=3):
     """
@@ -618,38 +692,97 @@ def cadastrar_produto_completo(driver, caminho_imagem, nome_produto, nome_coleca
 # ==============================================================================
 # PARA TESTES
 # ==============================================================================
-if __name__ == "__main__":
-    
-    NOME_DO_DIA = 'Beholder'
-    FOTO_DO_DIA = os.path.abspath(f"images/processadas/Bite the bullet/{NOME_DO_DIA}.jpg")
-    NOME_COLECAO = os.path.basename(os.path.dirname(FOTO_DO_DIA))
-    # Iniciando
+def executar_bot():
+    if not os.path.exists(ARQUIVO_MAPA):
+        print("❌ JSON do mapa não encontrado.")
+        return
+
+    with open(ARQUIVO_MAPA, "r", encoding="utf-8") as f:
+        lista_produtos = json.load(f)
+
     driver = iniciar_driver()
-    
-    try:
-        print("Acessando Shopee...")
-        dormir(5)
-    
-        preencher_dados_basicos(driver, FOTO_DO_DIA, NOME_DO_DIA, NOME_COLECAO)
-        
-        selecionar_categoria(driver)
-        
-        preencher_atributos(driver, 
-                            marca="Taberna e Goblins", 
-                            material="Resin", 
-                            peso="30g", 
-                            estilo="Fantasy", 
-                            quantidade=1)
-        
-        colar_descricao(driver)
-        
-        preencher_informacoes_finais(driver)
-    
-        print("\n✅ PROCESSO FINALIZADO COM SUCESSO!")
-    except Exception as e:
-        print(f"\n❌ ERRO FATAL NO MAIN: {e}")
-        
-    finally:
-        print("\n🏁 Encerrando execução...")
-        input("Pressione ENTER para fechar o navegador...")
-        driver.quit()
+    driver.get("https://seller.shopee.com.br/portal/product/new")
+    print("\n🔑 FAÇA O LOGIN MANUALMENTE SE NECESSÁRIO.")
+    input("Pressione ENTER quando estiver logado na Home da Shopee...")
+
+    for i, produto in enumerate(lista_produtos):
+        try:
+            nome = produto['product_name']
+            colecao = produto.get('collection_name', 'Geral')
+            variacoes = produto.get('variations', [])
+            
+            print(f"\n🚀 PROCESSANDO [{i+1}/{len(lista_produtos)}]: {nome}")
+
+            # ==========================================================
+            # 1. COLETOR INTELIGENTE DE IMAGENS
+            # ==========================================================
+            todas_imagens = [] # 1. Começa vazia
+            
+            # 2. ENCHE A LISTA (O Loop vem primeiro!)
+            for v in variacoes:
+                for img in v.get('images', []):
+                    # Usa o GPS para achar o arquivo físico
+                    caminho_real = encontrar_imagem_no_disco(produto, v, img)
+                    
+                    if caminho_real:
+                        todas_imagens.append(caminho_real)
+                    else:
+                        print(f"   ⚠️ Imagem não achada: {img.get('filename')}")
+
+            # 3. LIMPA (Deduplicação mantendo ordem de inserção)
+            todas_imagens = list(dict.fromkeys(todas_imagens))
+
+            # 4. ARRUMA (Aplica a lógica de Front/Main primeiro)
+            # Certifique-se que a função ordenar_por_prioridade_visual está definida no arquivo
+            todas_imagens = ordenar_por_prioridade_visual(todas_imagens)
+
+            # 5. VERIFICA
+            if not todas_imagens:
+                print("⚠️ Produto sem imagens encontradas no disco. Pulando.")
+                continue 
+
+            print(f"   📸 {len(todas_imagens)} imagens prontas e ordenadas.")
+
+            # ==========================================================
+            # 2. FLUXO DE NAVEGAÇÃO
+            # ==========================================================
+            driver.get("https://seller.shopee.com.br/portal/product/new")
+            dormir(3)
+
+            # Tela 1: Imagens e Nome
+            # Passamos a LISTA de imagens agora
+            preencher_dados_basicos(driver, todas_imagens, f"{nome} - {colecao} - RPG Miniatura 3D")
+            
+            # Tela 2: O Resto
+            #selecionar_categoria(driver)
+            #colar_descricao(driver)
+           # 
+            ## Ajuste os atributos conforme sua necessidade real
+            #preencher_atributos(driver, 
+            #                    marca="Taberna e Goblins", 
+            #                    material="Resin", 
+            #                    peso="50g", 
+            #                    estilo="Fantasy", 
+            #                    quantidade=1)
+           # 
+            ## Variações Dinâmicas (Se existirem)
+            #if variacoes:
+            #    # Nota: Certifique-se que 'preencher_variacoes_dinamicas' 
+            #    # também use 'encontrar_imagem_no_disco' internamente se for subir foto por variação
+            #    preencher_variacoes_dinamicas(driver, variacoes)
+           # 
+            #finalizar_envio(driver)
+            
+            print(f"✨ Sucesso: {nome}")
+            dormir(3)
+
+        except Exception as e:
+            print(f"❌ Falha no produto {nome}: {e}")
+            dormir(2)
+
+    print("🏁 Fim da fila.")
+    input("Enter para sair.")
+    driver.quit()
+
+if __name__ == "__main__":
+    executar_bot()
