@@ -9,7 +9,6 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.keys import Keys
-from selenium.common.exceptions import StaleElementReferenceException
 
 
 # ==============================================================================
@@ -19,6 +18,23 @@ DELAY_PADRAO = 0.5
 CAMINHO_PROJETO = os.getcwd()
 CAMINHO_PERFIL = os.path.join(CAMINHO_PROJETO, "Perfil_Bot_Shopee")
 ARQUIVO_MAPA = "mapa_global.json"
+
+# ==============================================================================
+# FUNÇÕES DE CONTROLE
+# ==============================================================================
+
+def verificar_parada():
+    """Verifica se a tecla de emergência (ESC) foi pressionada."""
+    if keyboard.is_pressed('esc'):
+        print("\n\n🛑 PARADA DE EMERGÊNCIA ACIONADA PELO USUÁRIO!")
+        sys.exit(0)
+
+def dormir(segundos):
+    """Substituto inteligente para time.sleep que checa o ESC."""
+    fim = time.time() + segundos
+    while time.time() < fim:
+        verificar_parada()
+        time.sleep(0.1)
 
 # ==============================================================================
 # FUNÇÕES AUXILIARES
@@ -36,12 +52,9 @@ def encontrar_imagem_no_disco(produto, variacao, imagem_obj):
     if caminho_json and os.path.exists(caminho_json):
         return os.path.abspath(caminho_json)
 
-    # 2. Se falhou, vamos calcular onde o Processador deveria ter salvado
-    # Base: ./images/processadas / NomeColecao
     nome_colecao = sanitarizar_nome(produto.get('collection_name', 'Geral'))
     pasta_colecao = os.path.join(os.getcwd(), "images", "processadas", nome_colecao)
     
-    # Se a pasta da coleção nem existe, aborta
     if not os.path.exists(pasta_colecao):
         return None
 
@@ -63,24 +76,12 @@ def encontrar_imagem_no_disco(produto, variacao, imagem_obj):
         
     return None
 
-def verificar_parada():
-    """Verifica se a tecla de emergência (ESC) foi pressionada."""
-    if keyboard.is_pressed('esc'):
-        print("\n\n🛑 PARADA DE EMERGÊNCIA ACIONADA PELO USUÁRIO!")
-        sys.exit(0)
-
-def dormir(segundos):
-    """Substituto inteligente para time.sleep que checa o ESC."""
-    fim = time.time() + segundos
-    while time.time() < fim:
-        verificar_parada()
-        time.sleep(0.1)
-
 def esperar_upload_ou_matar(driver, timeout=10): 
     """
     Espera o preview da imagem aparecer.
     Se não aparecer, lança um erro para o Main tratar (pular produto).
     """
+    trem = False
     try:
         WebDriverWait(driver, timeout).until(
             EC.presence_of_element_located(
@@ -88,11 +89,11 @@ def esperar_upload_ou_matar(driver, timeout=10):
             )
         )
         print("✅ Upload confirmado.")
-        return True
+        trem = True
+        return trem
         
     except Exception:
         print("❌ Upload demorou demais (Timeout).")
-        raise Exception("Falha no Upload da Imagem (Timeout)")
 
 def preencher_atributo_dinamico(driver, titulo_campo, valor_para_selecionar):
     verificar_parada()
@@ -100,8 +101,6 @@ def preencher_atributo_dinamico(driver, titulo_campo, valor_para_selecionar):
     print(f"\n--- Preenchendo: {titulo_campo} -> {valor_para_selecionar} ---")
 
     try:
-        # 1. ENCONTRA O CAMPO E CLICA PARA ABRIR O DROPDOWN
-        # (Essa parte de abrir o campo parece estar correta para todos os casos de select)
         if titulo_campo == "Quantidade":
             try:
                 # 1. O SEU XPATH (Que acha a linha certa) + O FINAL CORRETO (//input)
@@ -363,14 +362,22 @@ def preencher_dados_basicos(driver, lista_caminhos, nome_produto):
     print(f"Enviando {len(imagens_validas)} imagens para a galeria...")
     
     try:
+
         # Truque: Enviar todos os caminhos de uma vez separados por \n
         string_caminhos = "\n".join(imagens_validas)
+        while True:
+            campo_upload = wait.until(EC.presence_of_element_located((By.XPATH, "//input[@type='file']")))
+
+            dormir(1)
+            campo_upload.send_keys(string_caminhos)
+            dormir(1 + len(imagens_validas))
+            if esperar_upload_ou_matar(driver, timeout=1):
+                break
+            else:
+                driver.execute_script("arguments[0].value = '';", campo_upload)
+
         
-        campo_upload = wait.until(EC.presence_of_element_located((By.XPATH, "//input[@type='file']")))
-        campo_upload.send_keys(string_caminhos)
-        esperar_upload_ou_matar(driver, timeout=10)
         # Espera visual simples para garantir upload
-        dormir(3 + len(imagens_validas)) 
         print("✅ Galeria preenchida.")
 
     except Exception as e:
@@ -396,57 +403,68 @@ def selecionar_categoria(driver):
     Pesquisa a categoria e clica na hierarquia.
     """
     print("\n--- CATEGORIA ---")
-    wait = WebDriverWait(driver, 10)
-    
-    termo_alvo = "Figuras de Ação"
-    hierarquia_para_clicar = ["Hobbies e Coleções", "Itens Colecionáveis", "Figuras de Ação"]
-    xpath_categoria = "//div[contains(@class, 'product-category-box') or contains(@class, 'shopee-product-category-input')]"
+    sugestao1_encontrada = False
+    termo_alvo1 = "Hobbies e Coleções > Itens Colecionáveis > Figuras de Ação"
+    xpath_sugestao1 =  f"//div[contains(@class, 'category-select-radio') and contains(., '{termo_alvo1}')]"
     try:
-        # Abrir seletor
-        print("Abrindo seletor...")
-        espera_click(driver, xpath_categoria, timeout=1)
-
-        # Verificar sugestão
-        print(f"Verificando se '{termo_alvo}' já apareceu como sugestão...")
-        sugestao_encontrada = False
+        print(f"Verificando se '{termo_alvo1}' já apareceu como sugestão...")
+        espera_click(driver, xpath_sugestao1, timeout=5)
+        print("SUGESTÃO DA SHOPEE ENCONTRADA E CLICADA!")
+        sugestao1_encontrada = True
+    except:
+        print("Sugestão não encontrada. Iniciando busca manual...")
+        sugestao1_encontrada = False    
+    
+    if not sugestao1_encontrada:
+        termo_alvo2 = "Figuras de Ação"
+        hierarquia_para_clicar = ["Hobbies e Coleções", "Itens Colecionáveis", "Figuras de Ação"]
+        xpath_categoria = "//div[contains(@class, 'product-category-box') or contains(@class, 'shopee-product-category-input')]"
         try:
-            xpath_sugestao = f"//li[contains(., '{termo_alvo}')]"
-            espera_click(driver, xpath_sugestao)
-            print("SUGESTÃO DA SHOPEE ENCONTRADA E CLICADA!")
-            sugestao_encontrada = True
-        except:
-            print("Sugestão não encontrada. Iniciando busca manual...")
-            sugestao_encontrada = False 
-
-        # Busca Manual se não achou sugestão
-        if not sugestao_encontrada:
-            xpath_input_busca = "//input[contains(@placeholder, 'Insira ao menos')]"
-
-            print(f"Digitando '{termo_alvo}' no input...")
-            input_busca = espera_click(driver, xpath_input_busca)
-            input_busca.send_keys(termo_alvo)
-
-            # Loop na Hierarquia
-            print("Navegando pelas colunas filtradas...")
-            for item_nome in hierarquia_para_clicar:
-                print(f"   -> Procurando: {item_nome}")
-                xpath_item = f"//li[contains(., '{item_nome}')]"    
-                espera_click(driver, xpath_item)
-                print(f"   -> '{item_nome}' clicado.")
-
-        # Confirmando Categoria
-        print("Finalizando Categoria...")
-        try:
-            xpath_btn_confirmar = "//button[contains(., 'Confirmar')]"
-            espera_click(driver, xpath_btn_confirmar)
-        except:
-            pass 
-            
-        print("Categoria definida!")    
-
-    except Exception as e:
-        print(f"Erro na Categoria: {e}")
-        input("Pressione ENTER para continuar manualmente...")
+            # Abrir seletor
+            print("Abrindo seletor...")
+            espera_click(driver, xpath_categoria, timeout=1)
+    
+            # Verificar sugestão
+            print(f"Verificando se '{termo_alvo2}' já apareceu como sugestão...")
+            sugestao2_encontrada = False
+            try:
+                xpath_sugestao2 = f"//li[contains(., '{termo_alvo2}')]"
+                espera_click(driver, xpath_sugestao2)
+                print("SUGESTÃO DA SHOPEE ENCONTRADA E CLICADA!")
+                sugestao2_encontrada = True
+            except:
+                print("Sugestão não encontrada. Iniciando busca manual...")
+                sugestao2_encontrada = False 
+    
+            # Busca Manual se não achou sugestão
+            if not sugestao2_encontrada:
+                xpath_input_busca = "//input[contains(@placeholder, 'Insira ao menos')]"
+    
+                print(f"Digitando '{termo_alvo2}' no input...")
+                input_busca = espera_click(driver, xpath_input_busca)
+                input_busca.send_keys(termo_alvo2)
+    
+                # Loop na Hierarquia
+                print("Navegando pelas colunas filtradas...")
+                for item_nome in hierarquia_para_clicar:
+                    print(f"   -> Procurando: {item_nome}")
+                    xpath_item = f"//li[contains(., '{item_nome}')]"    
+                    espera_click(driver, xpath_item)
+                    print(f"   -> '{item_nome}' clicado.")
+    
+            # Confirmando Categoria
+            print("Finalizando Categoria...")
+            try:
+                xpath_btn_confirmar = "//button[contains(., 'Confirmar')]"
+                espera_click(driver, xpath_btn_confirmar)
+            except:
+                pass 
+                
+            print("Categoria definida!")    
+    
+        except Exception as e:
+            print(f"Erro na Categoria: {e}")
+            input("Pressione ENTER para continuar manualmente...")
 
 def preencher_atributos(driver, marca, material, peso, estilo, quantidade):
     """
@@ -490,52 +508,154 @@ def colar_descricao(driver):
     except Exception as e:
         print(f"❌ Erro ao inserir descrição: {e}")
 
-def preencher_informacoes_finais(driver):
+def preencher_variacoes(driver, produto, variacoes_json):
+    """
+    Preenche variações dinamicamente baseado no JSON.
+    Args:
+        driver: O navegador.
+        produto: O objeto do produto inteiro (para calcular nomes de imagem).
+        variacoes_json: A lista 'variations' do JSON.
+    """
+    print("\n--- CONFIGURANDO VARIAÇÕES (DINÂMICO) ---")
+    wait = WebDriverWait(driver, 10)
+
+    # Se não houver variações no JSON, retorna (ou trata como produto simples)
+    if not variacoes_json:
+        print(" -> Nenhuma variação detectada no JSON.")
+        return
+
+    try:
+        # ATIVAR VARIAÇÕES
+        xpath_btn_ativar = "//div[contains(@class, 'variation-add-button')]//button"
+        try:
+            espera_click(driver, xpath_btn_ativar, timeout=3)
+            print(" -> Botão 'Ativar Variações' clicado.")
+        except:
+            print(" -> Variações já parecem estar ativas (ou botão não encontrado).")
+        
+        # --------- Grupo 1 de variacoes - Modelo
+        try:
+            xpath_grupo1 = "//div[contains(@data-product-edit-field-unique-id, 'tierVariation_0')]"
+            try:
+                xpath_nome_grupo = f"{xpath_grupo1}//input"
+                espera_input(driver, xpath_nome_grupo).send_keys("Modelo")
+                dormir(0.5)
+            except Exception as e:
+                print(f"⚠️ Erro ao nomear grupo: {e}")
+
+            # 3. LOOP PARA CRIAR OPÇÕES (O Coração da Função)
+            print(f" -> Cadastrando {len(variacoes_json)} opções...")
+
+            for i, variacao in enumerate(variacoes_json):
+                nome_opcao = variacao['variation_name'] # Ex: "Machado", "Espada"
+
+                # A) Se não for o primeiro item, precisa clicar no "+" para criar nova linha
+                if i > 0:
+                    try:
+                        # XPath do botão de adicionar (+)
+                        # Geralmente fica dentro de 'variation-add-option' ou busca pelo ícone
+                        xpath_add = f"{xpath_grupo1}//div[contains(@class, 'variation-add-option')]//button"
+                        driver.find_element(By.XPATH, xpath_add).click()
+                        dormir(0.2) # Breve pausa para o input renderizar
+                    except:
+                        print(f"⚠️ Não achei botão '+' para opção {i+1}")
+
+                # B) Digitar o Nome da Opção
+                # O XPath usa índice [i+1] porque XPath começa em 1
+                xpath_input_opt = f"({xpath_grupo1}//div[contains(@class,'option-container')]//input[@placeholder='Inserir' or @placeholder='Enter'])[{i+1}]"
+
+                try:
+                    campo = espera_input(driver, xpath_input_opt)
+                    campo.send_keys(nome_opcao)
+                    print(f"    Option [{i+1}]: {nome_opcao}")
+                except Exception as e:
+                    print(f"❌ Erro ao digitar opção '{nome_opcao}': {e}")
+                    continue
+        except Exception as e:
+            print(f"⚠️ Erro ao criar grupo 1 de variações: {e}")
+        
+        # --------- Grupo 2 de variacoes - Prime
+        try:
+            xpath_btn_ativar2 = "//div[contains(@class, 'variation-add-2')]//button"
+            try:
+                # Timeout curto pois pode já estar ativo
+                espera_click(driver, xpath_btn_ativar2, timeout=3)
+                print(" -> Botão 'Ativar Variações' clicado.")
+            except Exception as e:
+                print(f" -> Variações já parecem estar ativas (ou botão não encontrado): {e}")
+            try:
+                xpath_grupo2 = "//div[contains(@data-product-edit-field-unique-id, 'tierVariation_1')]"
+                xpath_nome_grupo = f"{xpath_grupo2}//input"
+                espera_input(driver, xpath_nome_grupo).send_keys("Prime?")
+                dormir(0.5)
+            except Exception as e:
+                print(f"⚠️ Erro ao nomear grupo: {e}")
+
+            try:
+                for i, valor in enumerate(['Sim','Não']):
+                    xpath_input_opt2 = f"({xpath_grupo2}//div[contains(@class,'option-container')]//input[@placeholder='Inserir' or @placeholder='Enter'])[{i+1}]"
+                    espera_input(driver, xpath_input_opt2).send_keys(valor)
+                dormir(0.5)
+            except Exception as e:
+                print(f"⚠️ Erro ao nomear grupo: {e}")
+        except Exception as e:
+            print(f"⚠️ Erro ao criar grupo 2 de variações: {e}")
+        
+        # --------- Preenchimento de Preço/Estoque/Imagens -------------
+        print(" -> Aplicando Preço/Estoque em Massa...")
+        dormir(1)
+        
+        try:
+            # Inputs que ficam no cabeçalho da tabela (Batch Edit)
+            xpath_batch_price = "//div[contains(@class, 'batch-edit')]//input[@placeholder='Preço']"
+            xpath_batch_stock = "//div[contains(@class, 'batch-edit')]//input[@placeholder='Estoque']"
+            xpath_btn_apply = "//div[contains(@class, 'batch-edit')]//button[contains(., 'Aplicar')]" # Pode ser 'Apply to all'
+
+            # Preenche
+            driver.find_element(By.XPATH, xpath_batch_price).send_keys("99,90") # Preço Base
+            driver.find_element(By.XPATH, xpath_batch_stock).send_keys("500")   # Estoque Base
+            
+            # Aplica
+            driver.find_element(By.XPATH, xpath_btn_apply).click()
+            print("✅ Preços aplicados a todas as variações!")
+            
+        except Exception as e:
+            print(f"❌ Falha no Batch Edit ({e}). Tentando fallback manual para 1º item...")
+            # Aqui você poderia colocar seu código antigo de linha-a-linha como fallback
+            # Mas geralmente o Batch Edit é infalível se o XPath estiver certo.
+
+        for i, variacao in enumerate(variacoes_json):
+            if variacao.get('images'):
+                    primeira_imagem = variacao['images'][0]
+
+                    # Usa nossa função GPS (certifique-se que ela está acessível aqui)
+                    caminho_img = encontrar_imagem_no_disco(produto, variacao, primeira_imagem)
+
+                    if caminho_img:
+                        try:
+                            # O input file das variações geralmente segue a mesma ordem lógica
+                            xpath_file = f"(//div[contains(@class, 'variation-model-table-body')]//input[@type='file'])[{i+1}]"
+                            driver.find_element(By.XPATH, xpath_file).send_keys(caminho_img)
+                            # Sem dormir aqui para ser rápido, o upload acontece em background
+                        except Exception as e:
+                            print(f"    ⚠️ Falha upload foto variação {variacao.get('nome_opcao', 'Desconhecida')}: {e}")
+        print("✅ Variações preenchidas.")
+    except Exception as e:
+        print(f"❌ Erro CRÍTICO na sessão de variações: {e}")
+
+def preencher_finalizacoes(driver):
     """
     Sessoes: Informações de Vendas, Envio e finalização do produto.
     """
     print("\n--- INFORMAÇÕES FINAIS ---")
     wait = WebDriverWait(driver, 10)
-
-    try:
-        # Sessão Informações de vendas:
-        
-        print(" -> Verificando informações de venda...")
-        
-        # Clicando no botão de adicionar variações
-        xpath_variacoes = "//div[contains(@class, 'variation-add-button')]//button"
-        espera_click(driver, xpath_variacoes)
-
-        # Encontrando o input de variação
-        xpath_input_variacao = "//div[contains(@class, 'variation-edit-main')]//input"
-        espera_input(driver, xpath_input_variacao).send_keys("Primed?")
-
-        # Input de opções
-        xpath_input_opcao1 = "(//div[contains(@class,'option-container')]//input[@placeholder='Inserir'])[1]"
-        espera_input(driver, xpath_input_opcao1).send_keys("Sim")
-        xpath_input_opcao2 = "(//div[contains(@class,'option-container')]//input[@placeholder='Inserir'])[2]"
-        espera_input(driver, xpath_input_opcao2).send_keys("Não")
-
-        # Preços de opcoes
-        print(" Definindo preços das variações...")
-        xpath_preco_opcao1 = "(//div[contains(@class,'variation-model-table-body')]//div[contains(@class, 'table-cell-wrapper')][1]//input[contains(@placeholder, 'Inserir')])[1]"
-        espera_input(driver, xpath_preco_opcao1).send_keys("99,90")
-        xpath_preco_opcao2 = "(//div[contains(@class,'variation-model-table-body')]//div[contains(@class, 'table-cell-wrapper')][2]//input[contains(@placeholder, 'Inserir')])[1]"
-        espera_input(driver, xpath_preco_opcao2).send_keys("109,90")
-
-        # Estoque de opcoes
-        print(" Definindo estoques das variações...")
-        xpath_estoque_opcao1 = "(//div[contains(@class,'variation-model-table-body')]//div[contains(@class, 'table-cell-wrapper')][1]//input[contains(@placeholder, 'Inserir')])[2]"
-        espera_input(driver, xpath_estoque_opcao1).send_keys("500")
-        xpath_estoque_opcao2 = "(//div[contains(@class,'variation-model-table-body')]//div[contains(@class, 'table-cell-wrapper')][2]//input[contains(@placeholder, 'Inserir')])[2]"
-        espera_input(driver, xpath_estoque_opcao2).send_keys("500")
-
-
-    except Exception as e:
-        print(f"❌ Erro na sessão de variações: {e}")
     
     try:
         # Sessão Envio
+        dormir(1)
+        xpath_agrupavel = "//div[contains(@class,'editor-row') and contains(.,'Produto é um item agrupável')]//label[normalize-space()='Sim']"
+        xpath_agrupavel = espera_click(driver, xpath_agrupavel)
+        dormir(1)
         print(" Preenchendo Frete, peso e dimensões")
         
         # Peso
@@ -597,30 +717,11 @@ def preencher_informacoes_finais(driver):
     except Exception as e:
         print(f"❌ Erro na sessão de envio: {e}")
 
-
 def preencher_envio_e_salvar(driver):
     print("\n--- ENVIO E SALVAMENTO ---")
     wait = WebDriverWait(driver, 10)
 
     try:
-        # Peso e Dimensões (Mantido do seu código, apenas resumido)
-        xpath_peso = "//div[contains(@data-product-edit-field-unique-id, 'weight')]//input"
-        espera_input(driver, xpath_peso).send_keys("0.2") # 200g
-
-        dimensoes = ["width", "length", "height"]
-        for dim in dimensoes:
-            xpath_dim = f"//div[contains(@data-product-edit-field-unique-id, 'dimension.{dim}')]//input"
-            espera_input(driver, xpath_dim).send_keys("10")
-        
-        # Pré-Encomenda (Mantido)
-        xpath_sim = "//label[.//span[normalize-space()='Sim']]"
-        try:
-            espera_click(driver, xpath_sim, timeout=3).click()
-            xpath_dias = "//div[contains(@class, 'pre-order-input')]//input"
-            espera_input(driver, xpath_dias).send_keys("7")
-        except:
-            print("Não consegui ativar pré-encomenda (ou já estava).")
-
         # SALVAR
         print(" -> Salvando Rascunho...")
         xpath_salvar = "//button[.//span[contains(normalize-space(.), 'Salvar e Não Publicar')]]"
@@ -628,7 +729,7 @@ def preencher_envio_e_salvar(driver):
         
         # Modal confirmação (as vezes aparece, as vezes não)
         try:
-            xpath_confirm_modal = "//div[contains(@class,'eds-modal')]//button[contains(., 'Salvar')]"
+            xpath_confirm_modal = "//div[contains(@class,'eds-modal')]//button[contains(., 'Salvar e Não Publicar')]"
             espera_click(driver, xpath_confirm_modal, timeout=3)
         except:
             pass
@@ -671,7 +772,11 @@ def cadastrar_produto_completo(driver, caminho_imagem, nome_produto, nome_coleca
                                 estilo="Fantasy",
                                 quantidade=1)
             
-            preencher_informacoes_finais(driver)
+            preencher_variacoes(driver, produto={
+                'product_name': nome_produto
+            }, variacoes_json=[])
+            preencher_finalizacoes(driver)
+            preencher_envio_e_salvar(driver)
             
             # ==================================================================
             
@@ -712,16 +817,14 @@ def executar_bot():
             variacoes = produto.get('variations', [])
             
             print(f"\n🚀 PROCESSANDO [{i+1}/{len(lista_produtos)}]: {nome}")
-
+#
             # ==========================================================
             # 1. COLETOR INTELIGENTE DE IMAGENS
             # ==========================================================
-            todas_imagens = [] # 1. Começa vazia
+            todas_imagens = []
             
-            # 2. ENCHE A LISTA (O Loop vem primeiro!)
             for v in variacoes:
                 for img in v.get('images', []):
-                    # Usa o GPS para achar o arquivo físico
                     caminho_real = encontrar_imagem_no_disco(produto, v, img)
                     
                     if caminho_real:
@@ -729,14 +832,10 @@ def executar_bot():
                     else:
                         print(f"   ⚠️ Imagem não achada: {img.get('filename')}")
 
-            # 3. LIMPA (Deduplicação mantendo ordem de inserção)
             todas_imagens = list(dict.fromkeys(todas_imagens))
 
-            # 4. ARRUMA (Aplica a lógica de Front/Main primeiro)
-            # Certifique-se que a função ordenar_por_prioridade_visual está definida no arquivo
             todas_imagens = ordenar_por_prioridade_visual(todas_imagens)
 
-            # 5. VERIFICA
             if not todas_imagens:
                 print("⚠️ Produto sem imagens encontradas no disco. Pulando.")
                 continue 
@@ -749,29 +848,23 @@ def executar_bot():
             driver.get("https://seller.shopee.com.br/portal/product/new")
             dormir(3)
 
-            # Tela 1: Imagens e Nome
-            # Passamos a LISTA de imagens agora
-            preencher_dados_basicos(driver, todas_imagens, f"{nome} - {colecao} - RPG Miniatura 3D")
+            preencher_dados_basicos(driver, todas_imagens, f"{nome} - {colecao} - Miniatura RPG - Impressão Resina 3D")
             
-            # Tela 2: O Resto
-            #selecionar_categoria(driver)
-            #colar_descricao(driver)
-           # 
-            ## Ajuste os atributos conforme sua necessidade real
-            #preencher_atributos(driver, 
-            #                    marca="Taberna e Goblins", 
-            #                    material="Resin", 
-            #                    peso="50g", 
-            #                    estilo="Fantasy", 
-            #                    quantidade=1)
-           # 
-            ## Variações Dinâmicas (Se existirem)
-            #if variacoes:
-            #    # Nota: Certifique-se que 'preencher_variacoes_dinamicas' 
-            #    # também use 'encontrar_imagem_no_disco' internamente se for subir foto por variação
-            #    preencher_variacoes_dinamicas(driver, variacoes)
-           # 
-            #finalizar_envio(driver)
+            selecionar_categoria(driver)
+            
+            colar_descricao(driver)
+ 
+            preencher_atributos(driver, 
+                                marca="Taberna e Goblins", 
+                                material="Resin", 
+                                peso="50g", 
+                                estilo="Fantasy", 
+                                quantidade=1)
+
+            preencher_variacoes(driver, produto, variacoes)
+ 
+            preencher_finalizacoes(driver)
+            preencher_envio_e_salvar(driver)
             
             print(f"✨ Sucesso: {nome}")
             dormir(3)
