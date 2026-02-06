@@ -20,6 +20,8 @@ CAMINHO_PROJETO = os.getcwd()
 CAMINHO_PERFIL = os.path.join(CAMINHO_PROJETO, "Perfil_Bot_Shopee")
 ARQUIVO_MAPA = "mapa_global.json"
 
+ARQUIVO_HISTORICO = "logs/history.json"
+
 # ==============================================================================
 # FUNÇÕES DE CONTROLE
 # ==============================================================================
@@ -64,6 +66,24 @@ def espera_input(driver, xpath, timeout=10):
     el.send_keys(Keys.BACK_SPACE)
     return el
  
+def carregar_historico():
+    if not os.path.exists(ARQUIVO_HISTORICO):
+        return []
+    try:
+        with open(ARQUIVO_HISTORICO, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return []
+
+def salvar_no_historico(nome_produto):
+    historico = carregar_historico()
+    if nome_produto not in historico:
+        historico.append(nome_produto)
+        # Garante que a pasta logs existe
+        os.makedirs(os.path.dirname(ARQUIVO_HISTORICO), exist_ok=True)
+        with open(ARQUIVO_HISTORICO, "w", encoding="utf-8") as f:
+            json.dump(historico, f, indent=4, ensure_ascii=False)
+
 # ==============================================================================
 # FUNÇÕES ESPECIALIZADAS (PRIVADAS)
 # ==============================================================================
@@ -195,20 +215,16 @@ def espera_upload(driver, timeout=10):
         print("❌ Upload demorou demais (Timeout).")
 
 def preencher_atributo_dinamico(driver, titulo_campo, valor_para_selecionar):
-    verificar_parada()
-    # Note que removemos a criação do 'wait' aqui, pois as funções internas usam os wrappers
     print(f"\n--- Preenchendo: {titulo_campo} -> {valor_para_selecionar} ---")
 
     try:
         if titulo_campo == "Quantidade":
             _preencher_input_quantidade(driver, valor_para_selecionar)
             return
-
-        # Abre Dropdown
+        
         _abrir_dropdown(driver, titulo_campo)
         dormir(0.5)
 
-        # Decide fluxo
         if titulo_campo in ["Material", "Estilo"]:
             _selecionar_ou_criar_customizado(driver, valor_para_selecionar)
         else:
@@ -219,22 +235,17 @@ def preencher_atributo_dinamico(driver, titulo_campo, valor_para_selecionar):
     """
     Controlador principal que decide qual estratégia usar baseada no campo.
     """
-    verificar_parada()
     wait = WebDriverWait(driver, 10)
     print(f"\n--- Preenchendo: {titulo_campo} -> {valor_para_selecionar} ---")
 
     try:
-        # CASO 1: Campo de texto simples (Quantidade)
         if titulo_campo == "Quantidade":
             _preencher_input_quantidade(driver, wait, valor_para_selecionar)
             return
 
-        # CASO 2: Dropdowns (Marca, Material, Peso, Estilo...)
-        # Primeiro, sempre precisamos ABRIR o dropdown
         _abrir_dropdown(driver, wait, titulo_campo)
         dormir(0.5)
 
-        # Agora decidimos o que fazer com o dropdown aberto
         if titulo_campo in ["Material", "Estilo"]:
             # Estes permitem criar itens novos
             _selecionar_ou_criar_customizado(driver, wait, valor_para_selecionar)
@@ -725,12 +736,19 @@ def executar_bot(headless=False):
     # ==========================================================
     # Loop para cadastramento de produtos baseado no JSON
     # ==========================================================
+    produtos_ja_enviados = carregar_historico()
+    print(f"📜 Histórico carregado: {len(produtos_ja_enviados)} produtos já processados.")
+
     for i, produto in enumerate(lista_produtos):
         try:
             nome = produto['product_name']
             colecao = produto.get('collection_name', 'Geral')
             variacoes = produto.get('variations', [])
-            
+
+            if nome in produtos_ja_enviados:
+                print(f"   ⚠️ Produto já processado: {nome}")
+                continue
+
             print(f"\n🚀 PROCESSANDO [{i+1}/{len(lista_produtos)}]: {nome}")
             todas_imagens = []
             
@@ -755,11 +773,11 @@ def executar_bot(headless=False):
             # ==========================================================
             # FLUXO DE NAVEGAÇÃO
             # ==========================================================
-            #driver.get("https://seller.shopee.com.br/portal/product/new")
-            #dormir(3)
-            #preencher_dados_basicos(driver, todas_imagens, f"{nome} - {colecao} - Miniatura RPG - Impressão Resina 3D")
-            #selecionar_categoria(driver)
-            #colar_descricao(driver)
+            driver.get("https://seller.shopee.com.br/portal/product/new")
+            dormir(3)
+            preencher_dados_basicos(driver, todas_imagens, f"{nome} - {colecao} - Miniatura RPG - Impressão Resina 3D")
+            selecionar_categoria(driver)
+            colar_descricao(driver)
             preencher_atributos(driver, 
                                 marca="Taberna e Goblins", 
                                 material="Resin", 
@@ -767,11 +785,12 @@ def executar_bot(headless=False):
                                 estilo="Fantasy", 
                                 quantidade=1)
 
-            #preencher_variacoes(driver, produto, variacoes)
-            #preencher_finalizacoes(driver)
-            #preencher_envio_e_salvar(driver)
+            preencher_variacoes(driver, produto, variacoes)
+            preencher_finalizacoes(driver)
+            preencher_envio_e_salvar(driver)
             
             print(f"✨ Sucesso: {nome}")
+            salvar_no_historico(nome)
             dormir(3)
         except Exception as e:
             print(f"❌ Falha no produto {nome}: {e}")
