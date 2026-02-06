@@ -82,7 +82,7 @@ def gerar_mapa_unificado(pasta_raiz_originais, arquivo_saida="mapa_global.json")
     # Regras de Tradução (CRÍTICO)
     - Criaturas genéricas -> TRADUZIR para PT-BR (Human Mage -> Mago Humano).
     - Nomes Próprios/Clássicos -> MANTER em Inglês (Beholder, Lich).
-    - Exemplos: "Dragon" = "Dragão", "Dwarf" = "Anão", "Unchained Immortals" = "Imortais Libertos", "Owlbear" = "Urso-Coruja", etc.
+    - Exemplos: "Dragon" = "Dragão", "Dwarf" = "Anão", "Unchained Immortals" = "Imortais Libertos", "Owlbear" = "Urso-Coruja",  'DisplacerBeast' = 'Pantera Deslocadora', "Fire Hellion" = "Fire Hellion"( Não Traduz), etc.
     - Use sempre nomes comuns em RPG de mesa, como livros do d&d e etc.
     - Se estiver em dúvida, mantenha o nome em Inglês.
     - Separe nomes compostos com hífen (ex: "Dragonborn" = "Dracônico", 'Owlbear' = "Urso-Coruja"). 
