@@ -81,7 +81,7 @@ def esperar_upload_ou_matar(driver, timeout=10):
     Espera o preview da imagem aparecer.
     Se não aparecer, lança um erro para o Main tratar (pular produto).
     """
-    trem = False
+    imagem_na_tela = False
     try:
         WebDriverWait(driver, timeout).until(
             EC.presence_of_element_located(
@@ -89,8 +89,8 @@ def esperar_upload_ou_matar(driver, timeout=10):
             )
         )
         print("✅ Upload confirmado.")
-        trem = True
-        return trem
+        imagem_na_tela = True
+        return imagem_na_tela
         
     except Exception:
         print("❌ Upload demorou demais (Timeout).")
@@ -103,34 +103,24 @@ def preencher_atributo_dinamico(driver, titulo_campo, valor_para_selecionar):
     try:
         if titulo_campo == "Quantidade":
             try:
-                # 1. O SEU XPATH (Que acha a linha certa) + O FINAL CORRETO (//input)
-                # Adicionei //input no final para entrar na div e pegar o campo de texto
-                xpath_qtd = f"//div[contains(@class, 'attribute-select-item')][.//div[contains(@class, 'edit-label') and contains(., '{titulo_campo}')]]//input"
-                
+                xpath_qtd = f"//div[contains(@class, 'attribute-select-item')][.//div[contains(@class, 'edit-label') and contains(., '{titulo_campo}')]]//input"               
                 input_qtd = wait.until(EC.visibility_of_element_located((By.XPATH, xpath_qtd)))
-                
-                # Scroll para garantir foco
+
                 driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", input_qtd)
                 dormir(0.5)
-
-                # 2. LIMPAR E DIGITAR
-                # Inputs numéricos as vezes bugam com .clear(), então clicamos primeiro
                 input_qtd.click()
                 
                 # Tenta limpar com teclas (Ctrl+A -> Delete) é mais garantido que .clear() em React
                 from selenium.webdriver.common.keys import Keys
                 input_qtd.send_keys(Keys.CONTROL + "a")
                 input_qtd.send_keys(Keys.BACK_SPACE)
-                
-                # Digita o valor
                 input_qtd.send_keys(str(valor_para_selecionar))
-                
+              
                 print(f"✅ {titulo_campo} preenchido com '{valor_para_selecionar}'!")
-                return # Sai da função
+                return
 
             except Exception as e:
                 print(f"❌ Erro ao digitar quantidade: {e}")
-                # PLANO B: Se falhar o send_keys, força via JavaScript
                 try:
                     print("   -> Tentando forçar via JavaScript...")
                     driver.execute_script("arguments[0].value = arguments[1]; arguments[0].dispatchEvent(new Event('input'));", input_qtd, str(valor_para_selecionar))
@@ -139,21 +129,12 @@ def preencher_atributo_dinamico(driver, titulo_campo, valor_para_selecionar):
                 except:
                     pass
                 return
-        if titulo_campo == "Marca":
-            xpath_campo = f"//*[contains(text(), '{titulo_campo}')]/following::div[contains(@class, 'attribute-select-item')][1]"
-            campo_select = espera_click(driver, xpath_campo)
-        else:
-            xpath_campo = f"//div[contains(@class, 'attribute-select-item')][.//div[contains(@class, 'edit-label') and contains(., '{titulo_campo}')]]//div[contains(@class, 'edit-row-right-medium')]"
-            campo_select = espera_click(driver, xpath_campo)
         dormir(1) 
         
-
         # Lógica especifica para Material e Estilo
         if titulo_campo in ["Material", "Estilo"]:
             try:
                 print(f"\n--- INICIANDO FLUXO DE CRIAÇÃO PARA {titulo_campo} ---")
-                
-                # Clicar em Adicionar
                 xpath_add = "//div[contains(text(), 'Adicionar um novo item')] | //span[contains(., 'Adicionar um novo item')]"
                 btn_add = wait.until(EC.visibility_of_element_located((By.XPATH, xpath_add)))
                 driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", btn_add)
@@ -162,7 +143,6 @@ def preencher_atributo_dinamico(driver, titulo_campo, valor_para_selecionar):
                 
                 dormir(1) 
 
-                # Digitar no input dentro da UL
                 xpath_input = "//ul//input[@placeholder='Inserir' or @placeholder='Enter' or @placeholder='Please Input']"
                 input_novo = wait.until(EC.visibility_of_element_located((By.XPATH, xpath_input)))
                 
@@ -176,7 +156,6 @@ def preencher_atributo_dinamico(driver, titulo_campo, valor_para_selecionar):
 
                 dormir(1)
 
-                # Confirmar 
                 xpath_confirmar = "//ul//button"
                 espera_click(driver, xpath_confirmar)
                 dormir(DELAY_PADRAO)
@@ -185,9 +164,7 @@ def preencher_atributo_dinamico(driver, titulo_campo, valor_para_selecionar):
             except Exception as e:
                 print(f"\n❌ ERRO NO FLUXO DE CRIAÇÃO: {e}")
 
-        # ======================================================================
-        # LÓGICA TIPO B: SELECIONAR EXISTENTE (Marca, Peso, etc)
-        # ======================================================================
+        # LÓGICA de Marca, Peso, etc
         else:
             print(f"\n--- INICIANDO FLUXO DE SELEÇÃO PADRÃO PARA {titulo_campo} ---")
             
@@ -217,7 +194,6 @@ def preencher_atributo_dinamico(driver, titulo_campo, valor_para_selecionar):
                 print(f"❌ Não encontrei a opção '{valor_para_selecionar}' na lista.")
 
         dormir(0.5)
-
     except Exception as e:
         print(f"⚠️ Erro fatal ao tentar preencher {titulo_campo}: {e}")
 
@@ -256,17 +232,12 @@ def espera_input(driver, xpath, timeout=10):
     el.send_keys(Keys.CONTROL + "a")
     el.send_keys(Keys.BACK_SPACE)
     return el
-
-def limpar_input(el):
-    el.click()
-    el.send_keys(Keys.CONTROL + "a")
-    el.send_keys(Keys.BACK_SPACE)
        
 def ordenar_por_prioridade_visual(lista_caminhos):
     """
     Reordena a lista de imagens para que a 'Capa' seja sempre Front/Main/Fullbody.
     """
-    # Definição de prioridades (Menor número = Aparece primeiro)
+    # Definição de prioridades
     termos_prioridade = {
         "front": 0,
         "frente": 0,
@@ -326,7 +297,6 @@ def iniciar_driver(headless=False):
         "accessibility.animation_policy": 2 
     }
     options.add_experimental_option("prefs", prefs)
-    # ---------------------------------------------------------------
 
     # --- Otimização do Processo ---
     options.add_argument("--disable-smooth-scrolling")
@@ -343,7 +313,6 @@ def iniciar_driver(headless=False):
         print("👻 Modo Invisível (Headless) Ativado!")
         options.add_argument("--headless=new") 
    
-
     driver = uc.Chrome(options=options, version_main=144)
     driver.set_window_size(1080, 720)
         
@@ -418,8 +387,7 @@ def selecionar_categoria(driver):
         sugestao1_encontrada = True
     except:
         print("Sugestão não encontrada. Iniciando busca manual...")
-        sugestao1_encontrada = False    
-    
+        sugestao1_encontrada = False   
     if not sugestao1_encontrada:
         termo_alvo2 = "Figuras de Ação"
         hierarquia_para_clicar = ["Hobbies e Coleções", "Itens Colecionáveis", "Figuras de Ação"]
@@ -464,9 +432,7 @@ def selecionar_categoria(driver):
                 espera_click(driver, xpath_btn_confirmar)
             except:
                 pass 
-                
             print("Categoria definida!")    
-    
         except Exception as e:
             print(f"Erro na Categoria: {e}")
             input("Pressione ENTER para continuar manualmente...")
@@ -476,11 +442,8 @@ def preencher_atributos(driver, marca, material, peso, estilo, quantidade):
     PASSO 3: Preenche atributos técnicos (Marca, Peso, etc).
     """
     print("\n--- PASSO 3: ATRIBUTOS ---")
-    wait = WebDriverWait(driver, 10)
-
     campos = {"Material": material, "Marca": marca, "Peso do Produto": peso, 
               "Estilo": estilo, "Quantidade": quantidade}
-    
     for campo, valor in campos.items():
         print(f"Preparando para preencher: {campo}")
         preencher_atributo_dinamico(driver, campo, valor)
@@ -490,12 +453,10 @@ def colar_descricao(driver):
     Insere a descrição diretamente no editor Rich Text via JS.
     """
     print("DESCRIÇÃO")
-
     texto_descricao = carregar_texto_descricao()
     if not texto_descricao:
         print("⚠️ Texto da descrição vazio.")
         return
-
     try:
         xpath_editor = "//div[@contenteditable='true']"
         campo_descricao = espera_click(driver, xpath_editor)
@@ -507,9 +468,7 @@ def colar_descricao(driver):
             arguments[0].dispatchEvent(new Event('input', { bubbles: true }));
             arguments[0].dispatchEvent(new Event('change', { bubbles: true }));
         """, campo_descricao, html)
-
         print("✅ Descrição inserida com sucesso (JS).")
-
     except Exception as e:
         print(f"❌ Erro ao inserir descrição: {e}")
 
@@ -522,13 +481,6 @@ def preencher_variacoes(driver, produto, variacoes_json):
         variacoes_json: A lista 'variations' do JSON.
     """
     print("\n--- CONFIGURANDO VARIAÇÕES (DINÂMICO) ---")
-    wait = WebDriverWait(driver, 10)
-
-    # Se não houver variações no JSON, retorna (ou trata como produto simples)
-    if not variacoes_json:
-        print(" -> Nenhuma variação detectada no JSON.")
-        return
-
     try:
         # ATIVAR VARIAÇÕES
         xpath_btn_ativar = "//div[contains(@class, 'variation-add-button')]//button"
@@ -537,7 +489,6 @@ def preencher_variacoes(driver, produto, variacoes_json):
             print(" -> Botão 'Ativar Variações' clicado.")
         except:
             print(" -> Variações já parecem estar ativas (ou botão não encontrado).")
-        
         # --------- Grupo 1 de variacoes - Modelo
         try:
             xpath_grupo1 = "//div[contains(@data-product-edit-field-unique-id, 'tierVariation_0')]"
@@ -547,28 +498,10 @@ def preencher_variacoes(driver, produto, variacoes_json):
                 dormir(0.5)
             except Exception as e:
                 print(f"⚠️ Erro ao nomear grupo: {e}")
-
-            # 3. LOOP PARA CRIAR OPÇÕES (O Coração da Função)
             print(f" -> Cadastrando {len(variacoes_json)} opções...")
-
             for i, variacao in enumerate(variacoes_json):
-                nome_opcao = variacao['variation_name'] # Ex: "Machado", "Espada"
-
-                # A) Se não for o primeiro item, precisa clicar no "+" para criar nova linha
-                if i > 0:
-                    try:
-                        # XPath do botão de adicionar (+)
-                        # Geralmente fica dentro de 'variation-add-option' ou busca pelo ícone
-                        xpath_add = f"{xpath_grupo1}//div[contains(@class, 'variation-add-option')]//button"
-                        driver.find_element(By.XPATH, xpath_add).click()
-                        dormir(0.2) # Breve pausa para o input renderizar
-                    except:
-                        print(f"⚠️ Não achei botão '+' para opção {i+1}")
-
-                # B) Digitar o Nome da Opção
-                # O XPath usa índice [i+1] porque XPath começa em 1
+                nome_opcao = variacao['variation_name']
                 xpath_input_opt = f"({xpath_grupo1}//div[contains(@class,'option-container')]//input[@placeholder='Inserir' or @placeholder='Enter'])[{i+1}]"
-
                 try:
                     campo = espera_input(driver, xpath_input_opt)
                     campo.send_keys(nome_opcao)
@@ -578,12 +511,10 @@ def preencher_variacoes(driver, produto, variacoes_json):
                     continue
         except Exception as e:
             print(f"⚠️ Erro ao criar grupo 1 de variações: {e}")
-        
         # --------- Grupo 2 de variacoes - Prime
         try:
             xpath_btn_ativar2 = "//div[contains(@class, 'variation-add-2')]//button"
             try:
-                # Timeout curto pois pode já estar ativo
                 espera_click(driver, xpath_btn_ativar2, timeout=3)
                 print(" -> Botão 'Ativar Variações' clicado.")
             except Exception as e:
@@ -595,7 +526,6 @@ def preencher_variacoes(driver, produto, variacoes_json):
                 dormir(0.5)
             except Exception as e:
                 print(f"⚠️ Erro ao nomear grupo: {e}")
-
             try:
                 for i, valor in enumerate(['Sim','Não']):
                     xpath_input_opt2 = f"({xpath_grupo2}//div[contains(@class,'option-container')]//input[@placeholder='Inserir' or @placeholder='Enter'])[{i+1}]"
@@ -608,8 +538,7 @@ def preencher_variacoes(driver, produto, variacoes_json):
         
         # --------- Preenchimento de Preço/Estoque/Imagens -------------
         print(" -> Aplicando Preço/Estoque em Massa...")
-        dormir(1)
-        
+        dormir(1) 
         try:
             # Inputs que ficam no cabeçalho da tabela (Batch Edit)
             xpath_batch_price = "//div[contains(@class, 'batch-edit')]//input[@placeholder='Preço']"
@@ -623,33 +552,24 @@ def preencher_variacoes(driver, produto, variacoes_json):
             # Aplica
             driver.find_element(By.XPATH, xpath_btn_apply).click()
             print("✅ Preços aplicados a todas as variações!")
-            
         except Exception as e:
             print(f"❌ Falha no Batch Edit ({e}). Tentando fallback manual para 1º item...")
-
-        # Upload de imagens nas variações
-        print(" -> Vinculando imagens (ordenadas) às variações...")
         
+        print(" -> Vinculando imagens (ordenadas) às variações...")
         for i, variacao in enumerate(variacoes_json):
             imagens_da_var = variacao.get('images', [])
             
             if imagens_da_var:
-                # 1. Busca caminhos reais no disco para esta variação
                 caminhos_candidatos = []
                 for img_obj in imagens_da_var:
-                    # Usa o GPS
                     path = encontrar_imagem_no_disco(produto, variacao, img_obj)
                     if path: 
                         caminhos_candidatos.append(path)
-                
-                # 2. APLICA O SCORE (Front > Back)
-                # Reutilizamos a função global que já existe no seu código
+                # APLICA O SCORE DE PRIORIDADE, PARA GARANTIR QUE A IMAGEM SEJA DE FRENTEIRO (FRONT/MAIN)
                 if caminhos_candidatos:
                     caminhos_ordenados = ordenar_por_prioridade_visual(caminhos_candidatos)
                     melhor_foto = caminhos_ordenados[0] # Pega a campeã (Front/Main)
-                    
                     try:
-                        # Upload no índice correspondente da tabela
                         xpath_file = f"(//div[contains(@class, 'variation-model-table-body')]//input[@type='file'])[{i+1}]"
                         driver.find_element(By.XPATH, xpath_file).send_keys(melhor_foto)
                         print(f"    📸 Foto Variação [{i+1}]: {os.path.basename(melhor_foto)}")
@@ -657,19 +577,16 @@ def preencher_variacoes(driver, produto, variacoes_json):
                         print(f"    ⚠️ Falha upload foto variação {i+1}: {e}")
                 else:
                     print(f"    ⚠️ Nenhuma foto encontrada no disco para variação: {variacao['variation_name']}")
-
         print("✅ Variações concluídas.")
-
     except Exception as e:
         print(f"❌ Erro CRÍTICO na sessão de variações: {e}")
-
+    
 def preencher_finalizacoes(driver):
     """
     Sessoes: Informações de Vendas, Envio e finalização do produto.
     """
     print("\n--- INFORMAÇÕES FINAIS ---")
     wait = WebDriverWait(driver, 10)
-    
     try:
         # Sessão Envio
         dormir(1)
@@ -692,28 +609,20 @@ def preencher_finalizacoes(driver):
             input_dim = espera_input(driver, xpath_dim)
             input_dim.send_keys("10")
             dormir(0.3)
-
         dormir(1.5)
-
-        # Click swith de retirada
         try:
             xpath_switch_base = "//div[contains(@class,'logistics-item-ui-t1')][.//div[contains(normalize-space(.), 'Retirada')]]//div[contains(@class,'eds-switch')]"
-            
             switch_el = wait.until(EC.visibility_of_element_located((By.XPATH, xpath_switch_base)))
-            
             classes_do_elemento = switch_el.get_attribute("class")
             
             if "eds-switch--open" in classes_do_elemento:
                 print(" -> Switch Retirada estava ATIVADO. Desativando...")
                 switch_el.click()
-                dormir(0.5) 
-                
+                dormir(0.5)  
         except Exception as e:
             print(f"Não foi possível verificar o switch de Retirada: {e}")
 
-        # SOB ENCOMENDA 
         print("Configurando Pré-Encomenda")
-        
         # Encontrando o botão "Sim" para Pré-encomenda
         try:
             xpath_sim = "//div[@data-product-edit-field-unique-id='preOrder']//label[.//span[normalize-space()='Sim']]"
@@ -722,11 +631,8 @@ def preencher_finalizacoes(driver):
             dormir(DELAY_PADRAO)
             btn_sim.click()
             print("Pré-encomenda ativada.")
-
         except Exception as e:
             print(f"Erro ao clicar em Sim: {e}")
-
-        # Definindo 7 dias para pré-encomenda
         print(" -> Definindo 7 dias...")
         dormir(DELAY_PADRAO + 1)
         xpath_dias = "//div[contains(@class, 'pre-order-input')]//input[contains(@placeholder, '0')]"
@@ -739,28 +645,21 @@ def preencher_finalizacoes(driver):
 
 def preencher_envio_e_salvar(driver):
     print("\n--- ENVIO E SALVAMENTO ---")
-    wait = WebDriverWait(driver, 10)
-
     try:
         # SALVAR
         print(" -> Salvando Rascunho...")
         xpath_salvar = "//button[.//span[contains(normalize-space(.), 'Salvar e Não Publicar')]]"
         espera_click(driver, xpath_salvar)
-        
-        # Modal confirmação (as vezes aparece, as vezes não)
         try:
             xpath_confirm_modal = "//div[contains(@class,'eds-modal')]//button[contains(., 'Salvar e Não Publicar')]"
             espera_click(driver, xpath_confirm_modal, timeout=3)
         except:
             pass
-
         print("✅ Produto salvo!")
-
     except Exception as e:
         print(f"❌ Erro ao salvar: {e}")
 
 # Função Principal
-
 def cadastrar_produto_completo(driver, caminho_imagem, nome_produto, nome_colecao, max_tentativas=3):
     """
     Função Wrapper que chama todos os passos do cadastro.
@@ -778,13 +677,9 @@ def cadastrar_produto_completo(driver, caminho_imagem, nome_produto, nome_coleca
             # ==================================================================
             # EXECUÇÃO DO PREENCHIMENTO
             # ==================================================================
-
             preencher_dados_basicos(driver, caminho_imagem, nome_produto, nome_colecao)
-            
             selecionar_categoria(driver)
-            
             colar_descricao(driver)
-
             preencher_atributos(driver, 
                                 marca="Taberna e Goblins",  
                                 material="Resin",
@@ -798,15 +693,12 @@ def cadastrar_produto_completo(driver, caminho_imagem, nome_produto, nome_coleca
             preencher_finalizacoes(driver)
             preencher_envio_e_salvar(driver)
             
-            # ==================================================================
-            
             print(f"✨ PRODUTO {nome_produto} FINALIZADO COM SUCESSO!")
             dormir(2) 
             return
 
         except Exception as e:
             print(f"⚠️  Falha na tentativa {tentativa}: {e}")
-            
             if tentativa < max_tentativas:
                 print("♻️  Recarregando página para tentar novamente...")
                 dormir(2)
@@ -815,7 +707,7 @@ def cadastrar_produto_completo(driver, caminho_imagem, nome_produto, nome_coleca
                 raise e
 
 # ==============================================================================
-# PARA TESTES
+# FUNÇÃO DE TESTES
 # ==============================================================================
 def executar_bot():
     if not os.path.exists(ARQUIVO_MAPA):
@@ -829,7 +721,9 @@ def executar_bot():
     driver.get("https://seller.shopee.com.br/portal/product/new")
     print("\n🔑 FAÇA O LOGIN MANUALMENTE SE NECESSÁRIO.")
     input("Pressione ENTER quando estiver logado na Home da Shopee...")
-
+    # ==========================================================
+    # Loop para cadastramento de produtos baseado no JSON
+    # ==========================================================
     for i, produto in enumerate(lista_produtos):
         try:
             nome = produto['product_name']
@@ -837,10 +731,6 @@ def executar_bot():
             variacoes = produto.get('variations', [])
             
             print(f"\n🚀 PROCESSANDO [{i+1}/{len(lista_produtos)}]: {nome}")
-#
-            # ==========================================================
-            # 1. COLETOR INTELIGENTE DE IMAGENS
-            # ==========================================================
             todas_imagens = []
             
             for v in variacoes:
@@ -861,19 +751,14 @@ def executar_bot():
                 continue 
 
             print(f"   📸 {len(todas_imagens)} imagens prontas e ordenadas.")
-
             # ==========================================================
-            # 2. FLUXO DE NAVEGAÇÃO
+            # FLUXO DE NAVEGAÇÃO
             # ==========================================================
             driver.get("https://seller.shopee.com.br/portal/product/new")
             dormir(3)
-
             preencher_dados_basicos(driver, todas_imagens, f"{nome} - {colecao} - Miniatura RPG - Impressão Resina 3D")
-            
             selecionar_categoria(driver)
-            
             colar_descricao(driver)
- 
             preencher_atributos(driver, 
                                 marca="Taberna e Goblins", 
                                 material="Resin", 
@@ -882,17 +767,14 @@ def executar_bot():
                                 quantidade=1)
 
             preencher_variacoes(driver, produto, variacoes)
- 
             preencher_finalizacoes(driver)
             preencher_envio_e_salvar(driver)
             
             print(f"✨ Sucesso: {nome}")
             dormir(3)
-
         except Exception as e:
             print(f"❌ Falha no produto {nome}: {e}")
             dormir(2)
-
     print("🏁 Fim da fila.")
     input("Enter para sair.")
     driver.quit()
