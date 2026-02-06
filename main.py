@@ -4,12 +4,12 @@ import time
 import json
 from colorama import init, Fore, Style
 
-from modules import Organizador
-from modules import Processador
-from modules import Cadastrador
+from app import Organizador
+from app import Processador
+from app import Cadastrador
 
 # Configurações
-PASTA_ORIGINAIS = "./images/originais"
+PASTA_ORIGINAIS = "./data/input"
 ARQUIVO_MAPA = "mapa_global.json"
 
 # Inicializa cores (funciona no CMD do Windows)
@@ -20,7 +20,7 @@ def organizar():
     print(f"Lendo imagens de: {PASTA_ORIGINAIS}")
     
     if not os.path.exists(PASTA_ORIGINAIS):
-        print(f"{Fore.RED}❌ Pasta 'images/originais' não encontrada!{Style.RESET_ALL}")
+        print(f"{Fore.RED}❌ Pasta 'data/input' não encontrada!{Style.RESET_ALL}")
         return None
 
     # Chama a função do Organizador que gera o JSON

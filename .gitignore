@@ -16,4 +16,8 @@ env/
 *.exe
 chromedriver.exe
 Perfil_Bot_Shopee/
-resources/*
+mapa_global.json
+assets/*
+logs/*
+data/input/*
+data/processed/*
