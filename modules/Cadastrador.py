@@ -4,6 +4,7 @@ import json
 import keyboard  
 import sys
 import re
+import pyperclip
 import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -36,9 +37,107 @@ def dormir(segundos):
         verificar_parada()
         time.sleep(0.1)
 
+def espera_click(driver, xpath, timeout=10, scroll=True):
+    el = WebDriverWait(driver, timeout).until(
+        EC.element_to_be_clickable((By.XPATH, xpath))
+    )
+    if scroll:
+        driver.execute_script(
+            "arguments[0].scrollIntoView({block:'center'});", el
+        )
+
+    verificar_parada()
+
+    el.click()
+    return el
+
+def espera_input(driver, xpath, timeout=10):
+    el = WebDriverWait(driver, timeout).until(
+        EC.presence_of_element_located((By.XPATH, xpath))
+    )
+    driver.execute_script("arguments[0].scrollIntoView({block:'center'});", el)
+    driver.execute_script("arguments[0].click();", el)
+    
+    verificar_parada()
+
+    el.send_keys(Keys.CONTROL + "a")
+    el.send_keys(Keys.BACK_SPACE)
+    return el
+ 
+# ==============================================================================
+# FUNÇÕES ESPECIALIZADAS (PRIVADAS)
+# ==============================================================================
+
+def _preencher_input_quantidade(driver, valor):
+    try:
+        xpath_qtd = "//div[contains(@class, 'attribute-select-item')][.//div[contains(., 'Quantidade')]]//input"
+        input_qtd = espera_input(driver, xpath_qtd)
+        input_qtd.send_keys(str(valor))
+
+        print(f"✅ Quantidade definida: {valor}")
+        
+    except Exception as e:
+        print(f"⚠️ Erro no input normal, tentando JS para Quantidade: {e}")
+        try:
+            input_qtd = driver.find_element(By.XPATH, xpath_qtd)
+            driver.execute_script(
+                "arguments[0].value = arguments[1]; arguments[0].dispatchEvent(new Event('input'));", 
+                input_qtd, str(valor)
+            )
+        except:
+            pass
+
+def _abrir_dropdown(driver, titulo_campo):
+    if titulo_campo == "Marca":
+        xpath = f"//*[contains(text(), '{titulo_campo}')]/following::div[contains(@class, 'attribute-select-item')][1]"
+    else:
+        xpath = f"//div[contains(@class, 'attribute-select-item')][.//div[contains(., '{titulo_campo}')]]//div[contains(@class, 'edit-row-right-medium')]"
+    
+    return espera_click(driver, xpath)
+
+def _selecionar_ou_criar_customizado(driver, valor):
+    """
+    Para Material/Estilo
+    """
+    try:
+        xpath_add = "//div[contains(text(), 'Adicionar um novo item')] | //span[contains(., 'Adicionar um novo item')]"
+        espera_click(driver, xpath_add)
+        
+        xpath_novo_input = "//ul//div[contains(@class, 'eds-option-add__input')]//input"
+        input_novo = espera_input(driver, xpath_novo_input)
+        input_novo.send_keys(valor)
+        dormir(0.5)
+        
+        xpath_confirmar = "//ul//div[contains(@class, 'eds-option-add__input')]//button[contains(@class, 'eds-option-add__add-confirm-icon')]"
+        dormir(0.2)
+        espera_click(driver, xpath_confirmar)
+        print(f"✅ Novo item criado e selecionado: {valor}")
+        
+    except Exception as e:
+        print(f"❌ Erro ao criar item customizado '{valor}': {e}")
+
+def _selecionar_padrao(driver, valor):
+    """Para Marca, Peso, etc."""
+    try:
+        try:
+            xpath_busca = "//input[contains(@placeholder, 'Insira ao menos') or @type='search']"
+            input_busca = espera_input(driver, xpath_busca, timeout=3)
+            input_busca.send_keys(valor)
+            dormir(1)
+        except:
+            pass
+        
+        xpath_opcao = f"//div[contains(@class, 'eds-option')][contains(., '{valor}')]"
+        espera_click(driver, xpath_opcao)
+        print(f"✅ Selecionado: {valor}")    
+    
+    except Exception as e:
+        print(f"❌ Não foi possível selecionar '{valor}'.")
+
 # ==============================================================================
 # FUNÇÕES AUXILIARES
 # ==============================================================================
+
 def sanitarizar_nome(nome):
     """Remove caracteres proibidos (Igual ao Processador)"""
     return re.sub(r'[<>:"/\\|?*]', '', nome).strip()
@@ -76,7 +175,7 @@ def encontrar_imagem_no_disco(produto, variacao, imagem_obj):
         
     return None
 
-def esperar_upload_ou_matar(driver, timeout=10): 
+def espera_upload(driver, timeout=10): 
     """
     Espera o preview da imagem aparecer.
     Se não aparecer, lança um erro para o Main tratar (pular produto).
@@ -97,105 +196,54 @@ def esperar_upload_ou_matar(driver, timeout=10):
 
 def preencher_atributo_dinamico(driver, titulo_campo, valor_para_selecionar):
     verificar_parada()
-    wait = WebDriverWait(driver, 10)
+    # Note que removemos a criação do 'wait' aqui, pois as funções internas usam os wrappers
     print(f"\n--- Preenchendo: {titulo_campo} -> {valor_para_selecionar} ---")
 
     try:
         if titulo_campo == "Quantidade":
-            try:
-                xpath_qtd = f"//div[contains(@class, 'attribute-select-item')][.//div[contains(@class, 'edit-label') and contains(., '{titulo_campo}')]]//input"               
-                input_qtd = wait.until(EC.visibility_of_element_located((By.XPATH, xpath_qtd)))
+            _preencher_input_quantidade(driver, valor_para_selecionar)
+            return
 
-                driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", input_qtd)
-                dormir(0.5)
-                input_qtd.click()
-                
-                # Tenta limpar com teclas (Ctrl+A -> Delete) é mais garantido que .clear() em React
-                from selenium.webdriver.common.keys import Keys
-                input_qtd.send_keys(Keys.CONTROL + "a")
-                input_qtd.send_keys(Keys.BACK_SPACE)
-                input_qtd.send_keys(str(valor_para_selecionar))
-              
-                print(f"✅ {titulo_campo} preenchido com '{valor_para_selecionar}'!")
-                return
-
-            except Exception as e:
-                print(f"❌ Erro ao digitar quantidade: {e}")
-                try:
-                    print("   -> Tentando forçar via JavaScript...")
-                    driver.execute_script("arguments[0].value = arguments[1]; arguments[0].dispatchEvent(new Event('input'));", input_qtd, str(valor_para_selecionar))
-                    print("   -> JS funcionou!")
-                    return
-                except:
-                    pass
-                return
-        dormir(1) 
-        
-        # Lógica especifica para Material e Estilo
-        if titulo_campo in ["Material", "Estilo"]:
-            try:
-                print(f"\n--- INICIANDO FLUXO DE CRIAÇÃO PARA {titulo_campo} ---")
-                xpath_add = "//div[contains(text(), 'Adicionar um novo item')] | //span[contains(., 'Adicionar um novo item')]"
-                btn_add = wait.until(EC.visibility_of_element_located((By.XPATH, xpath_add)))
-                driver.execute_script("arguments[0].scrollIntoView({behavior: 'smooth', block: 'center'});", btn_add)
-                dormir(1)
-                driver.execute_script("arguments[0].click();", btn_add)
-                
-                dormir(1) 
-
-                xpath_input = "//ul//input[@placeholder='Inserir' or @placeholder='Enter' or @placeholder='Please Input']"
-                input_novo = wait.until(EC.visibility_of_element_located((By.XPATH, xpath_input)))
-                
-                input_novo.click()
-                try:
-                    input_novo.clear()
-                except:
-                    pass
-                input_novo.send_keys(valor_para_selecionar)
-                print(f"✅ Texto '{valor_para_selecionar}' enviado!")
-
-                dormir(1)
-
-                xpath_confirmar = "//ul//button"
-                espera_click(driver, xpath_confirmar)
-                dormir(DELAY_PADRAO)
-                print("✅ Item criado e selecionado!")
-
-            except Exception as e:
-                print(f"\n❌ ERRO NO FLUXO DE CRIAÇÃO: {e}")
-
-        # LÓGICA de Marca, Peso, etc
-        else:
-            print(f"\n--- INICIANDO FLUXO DE SELEÇÃO PADRÃO PARA {titulo_campo} ---")
-            
-            # Tenta digitar na busca (se houver) para filtrar a lista
-            try:
-                xpath_busca = "//input[contains(@placeholder, 'Insira ao menos') or @type='search']"
-                # Timeout curto aqui, pois nem todo select tem campo de busca
-                input_busca = espera_click(driver, xpath_busca, timeout=3)
-
-                print(f"   -> Filtrando por '{valor_para_selecionar}'...")
-                input_busca.click()
-                input_busca.clear()
-                input_busca.send_keys(valor_para_selecionar)
-                dormir(1.5) # Tempo para a lista filtrar
-            except:
-                print("   -> Campo de busca não encontrado, procurando direto na lista.")
-
-            # Seleciona opção na lista
-            # O contains(text()) as vezes falha com espaços, o contains(.,) é mais robusto
-            xpath_opcao = f"//div[contains(., '{valor_para_selecionar}') and contains(@class, 'eds-option')]"
-            
-            # Se não achar, pode ser que o texto esteja exato
-            try:
-                espera_click(driver, xpath_opcao)
-                print(f"✅ {titulo_campo} selecionado com sucesso!")
-            except:
-                print(f"❌ Não encontrei a opção '{valor_para_selecionar}' na lista.")
-
+        # Abre Dropdown
+        _abrir_dropdown(driver, titulo_campo)
         dormir(0.5)
+
+        # Decide fluxo
+        if titulo_campo in ["Material", "Estilo"]:
+            _selecionar_ou_criar_customizado(driver, valor_para_selecionar)
+        else:
+            _selecionar_padrao(driver, valor_para_selecionar)
+
     except Exception as e:
-        print(f"⚠️ Erro fatal ao tentar preencher {titulo_campo}: {e}")
+        print(f"🔥 Erro crítico em '{titulo_campo}': {e}")
+    """
+    Controlador principal que decide qual estratégia usar baseada no campo.
+    """
+    verificar_parada()
+    wait = WebDriverWait(driver, 10)
+    print(f"\n--- Preenchendo: {titulo_campo} -> {valor_para_selecionar} ---")
+
+    try:
+        # CASO 1: Campo de texto simples (Quantidade)
+        if titulo_campo == "Quantidade":
+            _preencher_input_quantidade(driver, wait, valor_para_selecionar)
+            return
+
+        # CASO 2: Dropdowns (Marca, Material, Peso, Estilo...)
+        # Primeiro, sempre precisamos ABRIR o dropdown
+        _abrir_dropdown(driver, wait, titulo_campo)
+        dormir(0.5)
+
+        # Agora decidimos o que fazer com o dropdown aberto
+        if titulo_campo in ["Material", "Estilo"]:
+            # Estes permitem criar itens novos
+            _selecionar_ou_criar_customizado(driver, wait, valor_para_selecionar)
+        else:
+            # Estes exigem seleção de lista existente (Marca, Peso)
+            _selecionar_padrao(driver, wait, valor_para_selecionar)
+
+    except Exception as e:
+        print(f"🔥 Erro crítico em '{titulo_campo}': {e}")
 
 def carregar_texto_descricao():
     try:
@@ -205,34 +253,7 @@ def carregar_texto_descricao():
     except FileNotFoundError:
         print(f"Erro: Arquivo não encontrado em {caminho_arquivo}")
         return None
-
-def espera_click(driver, xpath, timeout=10, scroll=True):
-    el = WebDriverWait(driver, timeout).until(
-        EC.element_to_be_clickable((By.XPATH, xpath))
-    )
-    if scroll:
-        driver.execute_script(
-            "arguments[0].scrollIntoView({block:'center'});", el
-        )
-
-    verificar_parada()
-
-    el.click()
-    return el
-
-def espera_input(driver, xpath, timeout=10):
-    el = WebDriverWait(driver, timeout).until(
-        EC.presence_of_element_located((By.XPATH, xpath))
-    )
-    driver.execute_script("arguments[0].scrollIntoView({block:'center'});", el)
-    driver.execute_script("arguments[0].click();", el)
-    
-    verificar_parada()
-
-    el.send_keys(Keys.CONTROL + "a")
-    el.send_keys(Keys.BACK_SPACE)
-    return el
-       
+          
 def ordenar_por_prioridade_visual(lista_caminhos):
     """
     Reordena a lista de imagens para que a 'Capa' seja sempre Front/Main/Fullbody.
@@ -344,7 +365,7 @@ def preencher_dados_basicos(driver, lista_caminhos, nome_produto):
             
             dormir(2 + len(imagens_validas))
             
-            if esperar_upload_ou_matar(driver, timeout=5):
+            if espera_upload(driver, timeout=5):
                 print("✅ Galeria preenchida.")
                 sucesso_upload = True
                 break
@@ -450,27 +471,54 @@ def preencher_atributos(driver, marca, material, peso, estilo, quantidade):
 
 def colar_descricao(driver):
     """
-    Insere a descrição diretamente no editor Rich Text via JS.
+    Insere a descrição usando a Área de Transferência (Ctrl+V).
+    Método muito mais rápido que previne travamentos do editor React.
     """
-    print("DESCRIÇÃO")
+    print("\n--- DESCRIÇÃO (MÉTODO TURBO) ---")
+
     texto_descricao = carregar_texto_descricao()
     if not texto_descricao:
         print("⚠️ Texto da descrição vazio.")
         return
+
     try:
+        wait = WebDriverWait(driver, 10)
         xpath_editor = "//div[@contenteditable='true']"
-        campo_descricao = espera_click(driver, xpath_editor)
+        
+        # 1. Encontra e clica para dar foco
+        campo_descricao = wait.until(EC.element_to_be_clickable((By.XPATH, xpath_editor)))
+        campo_descricao.click()
+        dormir(0.5)
 
-        html = texto_descricao.replace("\n", "<br>")
+        # 2. Limpa o conteúdo atual (Ctrl + A -> Delete)
+        # Garante que não vai duplicar se a Shopee tiver carregado algo
+        campo_descricao.send_keys(Keys.CONTROL, "a")
+        campo_descricao.send_keys(Keys.BACK_SPACE)
+        dormir(0.5)
 
-        driver.execute_script("""
-            arguments[0].innerHTML = arguments[1];
-            arguments[0].dispatchEvent(new Event('input', { bubbles: true }));
-            arguments[0].dispatchEvent(new Event('change', { bubbles: true }));
-        """, campo_descricao, html)
-        print("✅ Descrição inserida com sucesso (JS).")
+        # 3. Copia o texto para a memória do computador
+        pyperclip.copy(texto_descricao)
+        
+        # 4. Cola (Ctrl + V)
+        campo_descricao.send_keys(Keys.CONTROL, "v")
+        
+        print("✅ Descrição colada instantaneamente!")
+        dormir(1) # Tempo para o site processar a colagem
+
     except Exception as e:
-        print(f"❌ Erro ao inserir descrição: {e}")
+        print(f"❌ Erro no método Clipboard: {e}")
+        print("   -> Tentando método alternativo (JS)...")
+        
+        # Fallback: Se o Ctrl+V falhar, tenta o método antigo via JS
+        try:
+            html = texto_descricao.replace("\n", "<br>")
+            driver.execute_script("""
+                arguments[0].innerHTML = arguments[1];
+                arguments[0].dispatchEvent(new Event('input', { bubbles: true }));
+            """, campo_descricao, html)
+            print("   -> Fallback JS funcionou.")
+        except Exception as e_js:
+            print(f"   ❌ Falha total na descrição: {e_js}")
 
 def preencher_variacoes(driver, produto, variacoes_json):
     """
@@ -707,11 +755,11 @@ def executar_bot(headless=False):
             # ==========================================================
             # FLUXO DE NAVEGAÇÃO
             # ==========================================================
-            driver.get("https://seller.shopee.com.br/portal/product/new")
-            dormir(3)
-            preencher_dados_basicos(driver, todas_imagens, f"{nome} - {colecao} - Miniatura RPG - Impressão Resina 3D")
-            selecionar_categoria(driver)
-            colar_descricao(driver)
+            #driver.get("https://seller.shopee.com.br/portal/product/new")
+            #dormir(3)
+            #preencher_dados_basicos(driver, todas_imagens, f"{nome} - {colecao} - Miniatura RPG - Impressão Resina 3D")
+            #selecionar_categoria(driver)
+            #colar_descricao(driver)
             preencher_atributos(driver, 
                                 marca="Taberna e Goblins", 
                                 material="Resin", 
@@ -719,9 +767,9 @@ def executar_bot(headless=False):
                                 estilo="Fantasy", 
                                 quantidade=1)
 
-            preencher_variacoes(driver, produto, variacoes)
-            preencher_finalizacoes(driver)
-            preencher_envio_e_salvar(driver)
+            #preencher_variacoes(driver, produto, variacoes)
+            #preencher_finalizacoes(driver)
+            #preencher_envio_e_salvar(driver)
             
             print(f"✨ Sucesso: {nome}")
             dormir(3)
