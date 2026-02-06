@@ -353,41 +353,46 @@ def preencher_dados_basicos(driver, lista_caminhos, nome_produto):
     print("\n--- PASSO 1: IMAGENS (GALERIA) ---")
     wait = WebDriverWait(driver, 10)
     
-    # Filtra apenas caminhos que existem e limita a 9 (limite Shopee)
+    # Preenchendo imagens
     imagens_validas = [p for p in lista_caminhos if os.path.exists(p)][:9]
-    
     if not imagens_validas:
-        raise Exception("Nenhuma imagem válida encontrada para upload!")
+        raise Exception("Nenhuma imagem válida encontrada!")
 
-    print(f"Enviando {len(imagens_validas)} imagens para a galeria...")
+    string_caminhos = "\n".join(imagens_validas)
     
-    try:
+    max_tentativas = 3
+    sucesso_upload = False
 
-        # Truque: Enviar todos os caminhos de uma vez separados por \n
-        string_caminhos = "\n".join(imagens_validas)
-        while True:
+    for tentativa in range(1, max_tentativas + 1):
+        try:
+            print(f"Tentativa de Upload {tentativa}/{max_tentativas}...")
             campo_upload = wait.until(EC.presence_of_element_located((By.XPATH, "//input[@type='file']")))
-
+            
+            driver.execute_script("arguments[0].value = '';", campo_upload)
             dormir(1)
+            
             campo_upload.send_keys(string_caminhos)
-            dormir(1 + len(imagens_validas))
-            if esperar_upload_ou_matar(driver, timeout=1):
+            
+            dormir(2 + len(imagens_validas))
+            
+            if esperar_upload_ou_matar(driver, timeout=5):
+                print("✅ Galeria preenchida.")
+                sucesso_upload = True
                 break
             else:
-                driver.execute_script("arguments[0].value = '';", campo_upload)
-
+                print("⚠️ Falha na verificação visual. Tentando novamente...")
         
-        # Espera visual simples para garantir upload
-        print("✅ Galeria preenchida.")
+        except Exception as e:
+            print(f"❌ Erro na tentativa {tentativa}: {e}")
+            dormir(2)
 
-    except Exception as e:
-        print(f"❌ Erro na galeria: {e}")
-        raise e
+    if not sucesso_upload:
+        raise Exception("Falha crítica no upload da galeria após tentativas.")
 
     # Preenche Nome
     xpath_nome = "//input[@placeholder='Nome da Marca + Tipo do Produto + Atributos-chave (Materiais, Cores, Tamanho, Modelo)']"
     try:
-        espera_input(driver, xpath_nome).send_keys(nome_produto[:120]) # Limite 120 chars
+        espera_input(driver, xpath_nome).send_keys(nome_produto[:120])
         print("✅ Nome preenchido.")
     except Exception as e:
         print(f"❌ Erro no nome: {e}")
@@ -621,25 +626,40 @@ def preencher_variacoes(driver, produto, variacoes_json):
             
         except Exception as e:
             print(f"❌ Falha no Batch Edit ({e}). Tentando fallback manual para 1º item...")
-            # Aqui você poderia colocar seu código antigo de linha-a-linha como fallback
-            # Mas geralmente o Batch Edit é infalível se o XPath estiver certo.
 
+        # Upload de imagens nas variações
+        print(" -> Vinculando imagens (ordenadas) às variações...")
+        
         for i, variacao in enumerate(variacoes_json):
-            if variacao.get('images'):
-                    primeira_imagem = variacao['images'][0]
+            imagens_da_var = variacao.get('images', [])
+            
+            if imagens_da_var:
+                # 1. Busca caminhos reais no disco para esta variação
+                caminhos_candidatos = []
+                for img_obj in imagens_da_var:
+                    # Usa o GPS
+                    path = encontrar_imagem_no_disco(produto, variacao, img_obj)
+                    if path: 
+                        caminhos_candidatos.append(path)
+                
+                # 2. APLICA O SCORE (Front > Back)
+                # Reutilizamos a função global que já existe no seu código
+                if caminhos_candidatos:
+                    caminhos_ordenados = ordenar_por_prioridade_visual(caminhos_candidatos)
+                    melhor_foto = caminhos_ordenados[0] # Pega a campeã (Front/Main)
+                    
+                    try:
+                        # Upload no índice correspondente da tabela
+                        xpath_file = f"(//div[contains(@class, 'variation-model-table-body')]//input[@type='file'])[{i+1}]"
+                        driver.find_element(By.XPATH, xpath_file).send_keys(melhor_foto)
+                        print(f"    📸 Foto Variação [{i+1}]: {os.path.basename(melhor_foto)}")
+                    except Exception as e:
+                        print(f"    ⚠️ Falha upload foto variação {i+1}: {e}")
+                else:
+                    print(f"    ⚠️ Nenhuma foto encontrada no disco para variação: {variacao['variation_name']}")
 
-                    # Usa nossa função GPS (certifique-se que ela está acessível aqui)
-                    caminho_img = encontrar_imagem_no_disco(produto, variacao, primeira_imagem)
+        print("✅ Variações concluídas.")
 
-                    if caminho_img:
-                        try:
-                            # O input file das variações geralmente segue a mesma ordem lógica
-                            xpath_file = f"(//div[contains(@class, 'variation-model-table-body')]//input[@type='file'])[{i+1}]"
-                            driver.find_element(By.XPATH, xpath_file).send_keys(caminho_img)
-                            # Sem dormir aqui para ser rápido, o upload acontece em background
-                        except Exception as e:
-                            print(f"    ⚠️ Falha upload foto variação {variacao.get('nome_opcao', 'Desconhecida')}: {e}")
-        print("✅ Variações preenchidas.")
     except Exception as e:
         print(f"❌ Erro CRÍTICO na sessão de variações: {e}")
 
