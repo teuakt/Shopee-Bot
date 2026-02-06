@@ -1,183 +1,120 @@
 import os
-import shutil
+import sys
 import time
-from tqdm import tqdm  
+import json
+from colorama import init, Fore, Style
 
-# --- IMPORTS DOS SEUS MÓDULOS ---
-from modules.bot_shopee import iniciar_driver, cadastrar_produto_completo
+from modules import Organizador
+from modules import Processador
+from modules import Cadastrador
 
-try:
-    from modules.processador_de_imagens import processar_unica_imagem 
-except ImportError:
-    def processar_imagem(entrada, saida):
-        time.sleep(1)
-        shutil.copy(entrada, saida)
-        return True
+# Configurações
+PASTA_ORIGINAIS = "./images/originais"
+ARQUIVO_MAPA = "mapa_global.json"
 
-# CONFIGURAÇÃO DE PASTAS 
-BASE_DIR = os.getcwd()
-DIR_RAW = os.path.join(BASE_DIR, "images", "originais")
-DIR_PROC = os.path.join(BASE_DIR, "images", "processadas")
-DIR_DONE = os.path.join(BASE_DIR, "images", "enviadas")
+# Inicializa cores (funciona no CMD do Windows)
+init(autoreset=True)
 
-def garantir_pastas():
-    for pasta in [DIR_RAW, DIR_PROC, DIR_DONE]:
-        os.makedirs(pasta, exist_ok=True)
-
-def fluxo_processamento():
-    """Lê da pasta ORIGINAIS e salva na PROCESSADAS"""
-    garantir_pastas()
+def organizar():
+    print(f"\n{Fore.CYAN}=== PASSO 1: ORGANIZAÇÃO & IA ==={Style.RESET_ALL}")
+    print(f"Lendo imagens de: {PASTA_ORIGINAIS}")
     
-    lista_tarefas = []
+    if not os.path.exists(PASTA_ORIGINAIS):
+        print(f"{Fore.RED}❌ Pasta 'images/originais' não encontrada!{Style.RESET_ALL}")
+        return None
+
+    # Chama a função do Organizador que gera o JSON
+    dados = Organizador.gerar_mapa_unificado(PASTA_ORIGINAIS, ARQUIVO_MAPA)
     
-    # Varre a pasta de originais procurando subpastas
-    for raiz, pastas, arquivos in os.walk(DIR_RAW):
-        if raiz == DIR_RAW: continue # Pula arquivos soltos na raiz (opcional)
-        
-        nome_colecao = os.path.basename(raiz)
-        imagens = [f for f in arquivos if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
-        
-        for imagem in imagens:
-            caminho_origem = os.path.join(raiz, imagem)
-            lista_tarefas.append((caminho_origem, imagem, nome_colecao))
+    if dados:
+        print(f"{Fore.GREEN}✅ Mapa gerado com {len(dados)} produtos!{Style.RESET_ALL}")
+        return dados
+    else:
+        print(f"{Fore.RED}❌ Falha ao gerar mapa.{Style.RESET_ALL}")
+        return None
 
-    if not lista_tarefas:
-        print("⚠️  Nenhuma imagem encontrada nas subpastas de 'originais'.")
-        return False
-
-    print(f"\n🎨 Iniciando processamento de {len(lista_tarefas)} imagens...")
-
-    with tqdm(total=len(lista_tarefas), desc="Processando", unit="img", colour="blue") as barra:
-        for caminho_origem, nome_arquivo, nome_colecao in lista_tarefas:
-            
-
-            pasta_destino = os.path.join(DIR_PROC, nome_colecao)
-            os.makedirs(pasta_destino, exist_ok=True)
-            
-            try:
-                caminho_final = processar_unica_imagem(caminho_origem, pasta_destino)
-                
-                if caminho_final:
-                    novo_nome = os.path.basename(caminho_final)
-                    tqdm.write(f"  ✅ Processado: {nome_colecao}/{novo_nome}")
-                else:
-                    tqdm.write(f"  ⚠️ Ignorado (Extensão inválida): {nome_arquivo}")
-
-            except Exception as e:
-                tqdm.write(f"  ❌ Erro em {nome_arquivo}: {e}")
-            
-            barra.update(1)
-            
-    print(f"\n✨ Processamento finalizado!")
-    return True
-
-def fluxo_cadastro():
-    """Lê da pasta PROCESSADAS, cadastra na Shopee e move para ENVIADAS"""
-    garantir_pastas()
-    print(f"\nniciando varredura em: {DIR_PROC}")
+def processar():
+    print(f"\n{Fore.CYAN}=== PASSO 2: PROCESSAMENTO DE IMAGENS ==={Style.RESET_ALL}")
     
-    # Lista para guardar o trabalho a ser feito
-    # Formato: (caminho_completo_imagem, nome_arquivo, nome_colecao)
-    lista_tarefas = []
+    if not os.path.exists(ARQUIVO_MAPA):
+        print(f"{Fore.YELLOW}⚠️ Arquivo '{ARQUIVO_MAPA}' não encontrado.{Style.RESET_ALL}")
+        print("Rodando o Passo 1 automaticamente...")
+        dados = organizar()
+        if not dados: return
+    else:
+        with open(ARQUIVO_MAPA, "r", encoding="utf-8") as f:
+            dados = json.load(f)
 
-    # VARREDURA
-    for raiz, pastas, arquivos in os.walk(DIR_PROC):
-        # Buscando subpastas apenas
-        if raiz == DIR_PROC:
-            continue
-            
-        # O nome da pasta atual é o nome da coleção
-        nome_colecao = os.path.basename(raiz)
-        
-        # Filtra imagens
-        imagens = [f for f in arquivos if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
-        
-        for imagem in imagens:
-            caminho_completo = os.path.join(raiz, imagem)
-            lista_tarefas.append((caminho_completo, imagem, nome_colecao))
+    # Chama o pipeline do Processador
+    Processador.executar_pipeline(dados)
+    print(f"{Fore.GREEN}✅ Imagens processadas e prontas!{Style.RESET_ALL}")
 
-    if not lista_tarefas:
-        print("⚠️  Nenhuma imagem encontrada nas subpastas de 'processadas'.")
+def cadastrar():
+    print(f"\n{Fore.CYAN}=== PASSO 3: CADASTRO NA SHOPEE ==={Style.RESET_ALL}")
+    
+    if not os.path.exists(ARQUIVO_MAPA):
+        print(f"{Fore.RED}❌ Mapa não encontrado. Rode o passo 1 e 2 primeiro.{Style.RESET_ALL}")
         return
 
-    print(f"Encontrados {len(lista_tarefas)} produtos em diversas coleções.")
+    print("\nComo deseja rodar o navegador?")
+    print("1.  Modo VISÍVEL (Ideal para acompanhar ou fazer login)")
+    print("2.  Modo INVISÍVEL (Headless - Roda em 2º plano)")
     
-    pergunta_headless = input("Gostaria de rodar em 2º plano (invisível)? [S/N]: ").strip().lower()
-    modo_invisivel = pergunta_headless == 's'
+    escolha = input(f"{Fore.WHITE}Escolha (1 ou 2): {Style.RESET_ALL}").strip()
+    
+    modo_invisivel = False
+    if escolha == "2":
+        modo_invisivel = True
+        print(f"\n{Fore.YELLOW}⚠️  AVISO: No modo invisível você NÃO consegue fazer login manual.")
+        print(f"Certifique-se de já ter rodado o modo Visível uma vez para salvar sua sessão.{Style.RESET_ALL}")
+        print("Iniciando em 3 segundos...")
+        time.sleep(3)
 
-    if modo_invisivel:
-        print("⚠️  AVISO: No modo invisível você NÃO conseguirá fazer login manual.")
-        print("   Use apenas se já estiver logado no perfil anteriormente.")
-        time.sleep(2)
-   
-    # Inicia driver
-    driver = iniciar_driver(headless=modo_invisivel)
+    print(f"\n{Fore.GREEN}🚀 Iniciando o Robô...{Style.RESET_ALL}")
     
     try:
-        driver.get("https://seller.shopee.com.br/portal/product/new")
-        
-        if not modo_invisivel:
-            input("\n🔐 FAÇA O LOGIN MANUALMENTE e pressione ENTER aqui para começar...")
-        else:
-            print("\n⏳ Aguardando 5 segundos para carregar sessão salva...")
-            time.sleep(5)
-
-        # Loop com Barra de Progresso
-        with tqdm(total=len(lista_tarefas), desc="Cadastrando", unit="prod", colour="green") as barra:
-            for caminho_img, nome_arquivo, nome_colecao in lista_tarefas:
-                
-
-                nome_produto = os.path.splitext(nome_arquivo)[0]
-                tqdm.write(f"\n➡️  Iniciando: {nome_produto} | Coleção: {nome_colecao}")
-
-                try:
-                    # CHAMA O BOT
-                    cadastrar_produto_completo(driver, caminho_img, nome_produto, nome_colecao)
-                    
-                    # --- MOVER PARA ENVIADAS ---
-                    pasta_destino_colecao = os.path.join(DIR_DONE, nome_colecao)
-                    os.makedirs(pasta_destino_colecao, exist_ok=True)
-                    
-                    destino_final = os.path.join(pasta_destino_colecao, nome_arquivo)
-                    shutil.move(caminho_img, destino_final)
-                    
-                    tqdm.write(f"  ✅ Sucesso! Movido para: enviadas/{nome_colecao}")
-
-                except Exception as e:
-                    tqdm.write(f"  ❌ Falha ao cadastrar {nome_produto}: {e}")
-                
-                barra.update(1)
-
-    except KeyboardInterrupt:
-        print("\n🛑 Parado pelo usuário.")
-    finally:
-        print("\n🏁 Sessão de cadastro encerrada.")
+        Cadastrador.executar_bot(headless=modo_invisivel)
+    except Exception as e:
+        print(f"{Fore.RED}❌ Ocorreu um erro fatal no bot: {e}{Style.RESET_ALL}")
 
 def menu_principal():
     while True:
-        print("\n" + "="*40)
-        print("      MENU PRINCIPAL - Automação Loja Shopee")
-        print("="*40)
-        print("1. Processar Imagens (Originais -> Processadas)")
-        print("2. Cadastrar Produtos (Processadas -> Shopee)")
-        print("3. ❌ Sair")
+        print(f"\n{Fore.YELLOW}{'='*40}")
+        print(f"   🤖  AUTOMAÇÃO SHOPEE v2.0")
+        print(f"{'='*40}{Style.RESET_ALL}")
+        print("1. 🧠  Organizar (Ler Originais + Gemini AI)")
+        print("2. 🎨  Processar (Recortar + Logo + Padronizar)")
+        print("3. 🚀  Cadastrar (Bot Selenium)")
+        print(f"{Fore.BLUE}4. ⚡  RODAR TUDO (Pipeline Completo){Style.RESET_ALL}")
+        print("0. ❌  Sair")
         
-        opcao = input("\nEscolha uma opção (1-3): ").strip()
+        opcao = input(f"\n{Fore.WHITE}Escolha uma opção: {Style.RESET_ALL}").strip()
 
         if opcao == "1":
-            tem_arquivos = fluxo_processamento()
-            if tem_arquivos:
-                resp = input("\nDesceja CADASTRAR os produtos processados agora? (s/n): ").lower()
-                if resp == 's':
-                    fluxo_cadastro()
+            organizar()
+            input("\nEnter para voltar...")
         
         elif opcao == "2":
-            fluxo_cadastro()
-            
+            processar()
+            input("\nEnter para voltar...")
+        
         elif opcao == "3":
-            print("Saindo... Até mais!")
+            cadastrar()
+            # O Cadastrador já tem seu próprio 'Enter para sair'
+        
+        elif opcao == "4":
+            print(f"\n{Fore.MAGENTA}🚀 INICIANDO MODO TURBO...{Style.RESET_ALL}")
+            dados = organizar()
+            if dados:
+                processar()
+                resp = input("\nIniciar o cadastro agora? (S/N): ").lower()
+                if resp == 's':
+                    cadastrar()
+        
+        elif opcao == "0":
+            print("Até logo!")
             break
-            
+        
         else:
             print("Opção inválida!")
 
@@ -185,4 +122,4 @@ if __name__ == "__main__":
     try:
         menu_principal()
     except KeyboardInterrupt:
-        print("\nEncerrando programa...")
+        print("\nPrograma encerrado.")

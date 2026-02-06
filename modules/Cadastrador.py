@@ -274,7 +274,7 @@ def ordenar_por_prioridade_visual(lista_caminhos):
 
 def iniciar_driver(headless=False):
     """Configura o driver com otimizações de performance SEGURAS."""
-    print("Iniciando Driver (Modo Performance)...")
+    print("Iniciando Driver...")
     options = uc.ChromeOptions()
     options.add_argument(f"--user-data-dir={CAMINHO_PERFIL}")
     options.add_argument("--no-first-run --no-service-autorun --password-store=basic")
@@ -659,57 +659,10 @@ def preencher_envio_e_salvar(driver):
     except Exception as e:
         print(f"❌ Erro ao salvar: {e}")
 
-# Função Principal
-def cadastrar_produto_completo(driver, caminho_imagem, nome_produto, nome_colecao, max_tentativas=3):
-    """
-    Função Wrapper que chama todos os passos do cadastro.
-    """
-    print(f"\n🚀 INICIANDO CADASTRO: {nome_produto} (Coleção: {nome_colecao})")
-    
-    for tentativa in range(1, max_tentativas + 1):
-        try:
-            print(f"🔄 Tentativa {tentativa} de {max_tentativas}...")
-
-            url_add = "https://seller.shopee.com.br/portal/product/new"
-            driver.get(url_add)
-            dormir(3) 
-
-            # ==================================================================
-            # EXECUÇÃO DO PREENCHIMENTO
-            # ==================================================================
-            preencher_dados_basicos(driver, caminho_imagem, nome_produto, nome_colecao)
-            selecionar_categoria(driver)
-            colar_descricao(driver)
-            preencher_atributos(driver, 
-                                marca="Taberna e Goblins",  
-                                material="Resin",
-                                peso="30g",
-                                estilo="Fantasy",
-                                quantidade=1)
-            
-            preencher_variacoes(driver, produto={
-                'product_name': nome_produto
-            }, variacoes_json=[])
-            preencher_finalizacoes(driver)
-            preencher_envio_e_salvar(driver)
-            
-            print(f"✨ PRODUTO {nome_produto} FINALIZADO COM SUCESSO!")
-            dormir(2) 
-            return
-
-        except Exception as e:
-            print(f"⚠️  Falha na tentativa {tentativa}: {e}")
-            if tentativa < max_tentativas:
-                print("♻️  Recarregando página para tentar novamente...")
-                dormir(2)
-            else:
-                print(f"❌  Esgotadas as {max_tentativas} tentativas para {nome_produto}.")
-                raise e
-
 # ==============================================================================
-# FUNÇÃO DE TESTES
+# FUNÇÃO PRINCIPAL (WRAPPER)
 # ==============================================================================
-def executar_bot():
+def executar_bot(headless=False):
     if not os.path.exists(ARQUIVO_MAPA):
         print("❌ JSON do mapa não encontrado.")
         return
@@ -717,7 +670,7 @@ def executar_bot():
     with open(ARQUIVO_MAPA, "r", encoding="utf-8") as f:
         lista_produtos = json.load(f)
 
-    driver = iniciar_driver()
+    driver = iniciar_driver(headless=headless)
     driver.get("https://seller.shopee.com.br/portal/product/new")
     print("\n🔑 FAÇA O LOGIN MANUALMENTE SE NECESSÁRIO.")
     input("Pressione ENTER quando estiver logado na Home da Shopee...")
